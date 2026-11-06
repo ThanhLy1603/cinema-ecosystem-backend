@@ -6,9 +6,9 @@ spring:
     name: cinema-ecosystem-backend
 
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:cinema_db}
-    username: ${DB_USER:cinema_user}
-    password: ${DB_PASSWORD:cinema_password}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5431}/${DB_NAME:cinema_ecosystem_db}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:Thanhly12345}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 15
@@ -36,7 +36,6 @@ spring:
       port: ${REDIS_PORT:6379}
       timeout: 5000ms
 
-# JWT Configuration (Rule 2: Silent Refresh Token Flow)
 app:
   jwt:
     secret: 9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b
