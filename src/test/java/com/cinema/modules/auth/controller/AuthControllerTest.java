@@ -170,7 +170,7 @@ class AuthControllerTest {
                         .cookie(new Cookie("refresh_token", "raw-old")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.accessToken").value("access-jwt"))
-                .andExpect(jsonPath("$.data.user").doesNotExist())
+                .andExpect(jsonPath("$.data.user.email").value("an@cinema.vn"))
                 .andReturn().getResponse().getHeader(HttpHeaders.SET_COOKIE);
 
         assertEquals(true, setCookie.contains("refresh_token=raw-new"), setCookie);

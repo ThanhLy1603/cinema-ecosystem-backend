@@ -13,7 +13,7 @@ public record AuthSession(UserResponse user, String accessToken, String refreshT
     }
 
     public RefreshTokenResponse toRefreshTokenResponse() {
-        return new RefreshTokenResponse(accessToken);
+        return new RefreshTokenResponse(accessToken, user);
     }
 
     @Override
