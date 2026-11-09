@@ -3,9 +3,12 @@ package com.cinema.modules.auth.controller;
 import com.cinema.common.exception.AppException;
 import com.cinema.common.exception.GlobalExceptionHandler;
 import com.cinema.config.CookieProperties;
+import com.cinema.modules.auth.dto.request.ForgotPasswordRequest;
 import com.cinema.modules.auth.dto.request.GoogleLoginRequest;
 import com.cinema.modules.auth.dto.request.LoginRequest;
 import com.cinema.modules.auth.dto.request.RegisterRequest;
+import com.cinema.modules.auth.dto.request.ResetPasswordRequest;
+import com.cinema.modules.auth.dto.request.VerifyEmailRequest;
 import com.cinema.modules.auth.dto.response.UserResponse;
 import com.cinema.modules.auth.model.AuthSession;
 import com.cinema.modules.auth.model.ClientInfo;
@@ -14,7 +17,9 @@ import com.cinema.modules.auth.security.AuthenticatedUser;
 import com.cinema.modules.auth.security.RefreshTokenCookieFactory;
 import com.cinema.modules.auth.security.SessionCookieWriter;
 import com.cinema.modules.auth.service.AuthService;
+import com.cinema.modules.auth.service.EmailVerificationService;
 import com.cinema.modules.auth.service.GoogleAuthService;
+import com.cinema.modules.auth.service.PasswordResetService;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,6 +44,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -63,12 +69,18 @@ class AuthControllerTest {
     @Mock
     private GoogleAuthService googleAuthService;
 
+    @Mock
+    private PasswordResetService passwordResetService;
+
+    @Mock
+    private EmailVerificationService emailVerificationService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         AuthController authController = new AuthController(
-                authService, googleAuthService, new SessionCookieWriter(
+                authService, googleAuthService, passwordResetService, emailVerificationService, new SessionCookieWriter(
                         new RefreshTokenCookieFactory(new CookieProperties(true)),
                         new AccessTokenCookieFactory(new CookieProperties(true))));
         mockMvc = MockMvcBuilders.standaloneSetup(authController)
@@ -150,6 +162,108 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.data.roles[0]").value("ROLE_CUSTOMER"))
                 .andExpect(jsonPath("$.data.passwordHash").doesNotExist())
                 .andExpect(jsonPath("$.data.phone").doesNotExist());
+    }
+
+    @Test
+    void registerSendsTheVerificationEmailForTheNewUser() throws Exception {
+        when(authService.register(any(RegisterRequest.class))).thenReturn(USER_RESPONSE);
+
+        mockMvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
+                        {"email":"an@cinema.vn","password":"Matkhau123","fullName":"Nguyễn An"}"""))
+                .andExpect(status().isCreated());
+
+        verify(emailVerificationService).sendVerification(eq(1L), any());
+    }
+
+    @Test
+    void registerStillSucceedsWhenTheVerificationEmailCannotBeCreated() throws Exception {
+        when(authService.register(any(RegisterRequest.class))).thenReturn(USER_RESPONSE);
+        doThrow(new IllegalStateException("redis down")).when(emailVerificationService).sendVerification(eq(1L), any());
+
+        mockMvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
+                        {"email":"an@cinema.vn","password":"Matkhau123","fullName":"Nguyễn An"}"""))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.email").value("an@cinema.vn"));
+    }
+
+    @Test
+    void forgotPasswordAlwaysReturnsTheSameGenericMessage() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"ai-do@cinema.vn\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value(
+                        "Nếu email tồn tại trong hệ thống, chúng tôi đã gửi hướng dẫn đặt lại mật khẩu"));
+
+        verify(passwordResetService).requestReset(any(ForgotPasswordRequest.class), any());
+    }
+
+    @Test
+    void forgotPasswordRejectsMalformedEmailWith400() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"khong-phai-email\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.data.email").exists());
+
+        verify(passwordResetService, never()).requestReset(any(ForgotPasswordRequest.class), any());
+    }
+
+    @Test
+    void resetPasswordSucceedsWithoutIssuingAnySessionCookie() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"raw-token\",\"newPassword\":\"Matkhaumoi456\"}"))
+                .andExpect(status().isOk())
+                .andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE));
+
+        verify(passwordResetService).resetPassword(any(ResetPasswordRequest.class));
+    }
+
+    @Test
+    void resetPasswordWithBadTokenReturns400() throws Exception {
+        doThrow(new AppException("hết hạn", HttpStatus.BAD_REQUEST, "INVALID_OR_EXPIRED_TOKEN"))
+                .when(passwordResetService).resetPassword(any(ResetPasswordRequest.class));
+
+        mockMvc.perform(post("/api/v1/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"bad\",\"newPassword\":\"Matkhaumoi456\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_OR_EXPIRED_TOKEN"));
+    }
+
+    @Test
+    void resetPasswordRejectsWeakPasswordBeforeReachingTheService() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"raw-token\",\"newPassword\":\"yeu\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.data.newPassword").exists());
+
+        verify(passwordResetService, never()).resetPassword(any(ResetPasswordRequest.class));
+    }
+
+    @Test
+    void verifyEmailDelegatesToTheService() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/verify-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"raw-token\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Xác thực email thành công"));
+
+        verify(emailVerificationService).verifyEmail(any(VerifyEmailRequest.class));
+    }
+
+    @Test
+    void resendVerificationUsesThePrincipalUserId() throws Exception {
+        AuthenticatedUser authenticatedUser = new AuthenticatedUser(9L, "an@cinema.vn", List.of("ROLE_CUSTOMER"));
+        SecurityContextHolder.getContext().setAuthentication(
+                UsernamePasswordAuthenticationToken.authenticated(authenticatedUser, null, List.of()));
+
+        mockMvc.perform(post("/api/v1/auth/resend-verification")).andExpect(status().isOk());
+
+        verify(emailVerificationService).resendVerification(eq(9L), any());
     }
 
     @Test

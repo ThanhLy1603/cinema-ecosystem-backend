@@ -31,6 +31,7 @@ public class UserProfileService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthService authService;
+    private final BranchAccessService branchAccessService;
     private final Clock clock;
 
     public UserProfileService(
@@ -39,12 +40,14 @@ public class UserProfileService {
             RefreshTokenRepository refreshTokenRepository,
             PasswordEncoder passwordEncoder,
             AuthService authService,
+            BranchAccessService branchAccessService,
             Clock clock) {
         this.userRepository = userRepository;
         this.userIdentityRepository = userIdentityRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.authService = authService;
+        this.branchAccessService = branchAccessService;
         this.clock = clock;
     }
 
@@ -131,7 +134,7 @@ public class UserProfileService {
         List<AuthProvider> authProviders = userIdentityRepository.findByUserId(user.getId()).stream()
                 .map(UserIdentity::getProvider)
                 .toList();
-        return UserProfileResponse.from(user, authProviders);
+        return UserProfileResponse.from(user, authProviders, branchAccessService.getAssignedBranches(user.getId()));
     }
 
     private String normalizePhone(String phone) {

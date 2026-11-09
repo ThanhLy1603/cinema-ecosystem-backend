@@ -1,6 +1,8 @@
 spring:
   datasource:
     password: <mật khẩu PostgreSQL>
+  mail:
+    password: <App Password 16 ký tự của Gmail gửi mail, viết liền, tạo tại https://myaccount.google.com/apppasswords>
 
 app:
   jwt:

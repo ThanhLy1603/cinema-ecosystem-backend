@@ -24,9 +24,11 @@ public record UserProfileResponse(
         String tier,
         boolean emailVerified,
         boolean hasPassword,
-        List<String> linkedProviders) {
+        List<String> linkedProviders,
+        List<BranchAssignmentResponse> branches) {
 
-    public static UserProfileResponse from(User user, List<AuthProvider> authProviders) {
+    public static UserProfileResponse from(
+            User user, List<AuthProvider> authProviders, List<BranchAssignmentResponse> branchAssignmentResponses) {
         List<String> roleCodes = user.getRoles().stream().map(Role::getCode).sorted().toList();
         List<String> providerNames = authProviders.stream().map(AuthProvider::name).sorted().toList();
         return new UserProfileResponse(
@@ -42,6 +44,7 @@ public record UserProfileResponse(
                 user.getTier().name(),
                 user.isEmailVerified(),
                 user.hasPassword(),
-                providerNames);
+                providerNames,
+                branchAssignmentResponses);
     }
 }

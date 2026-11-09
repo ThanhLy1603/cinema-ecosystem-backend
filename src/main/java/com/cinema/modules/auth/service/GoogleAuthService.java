@@ -93,7 +93,8 @@ public class GoogleAuthService {
         }
         if (!user.isEmailVerified()) {
             throw new AppException(
-                    "Email này đã đăng ký bằng mật khẩu nhưng chưa được xác thực, vui lòng đăng nhập bằng mật khẩu",
+                    "Email này đã đăng ký bằng mật khẩu nhưng chưa được xác thực. Hãy đăng nhập bằng mật khẩu, "
+                            + "xác thực email rồi đăng nhập lại bằng Google",
                     HttpStatus.CONFLICT, "ACCOUNT_EXISTS_UNVERIFIED");
         }
         if (userIdentityRepository.existsByUserIdAndProvider(user.getId(), AuthProvider.GOOGLE)) {

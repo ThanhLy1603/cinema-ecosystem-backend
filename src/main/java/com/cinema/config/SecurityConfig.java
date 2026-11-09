@@ -21,7 +21,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
-@EnableConfigurationProperties({JwtProperties.class, CookieProperties.class, GoogleProperties.class})
+@EnableConfigurationProperties({
+        JwtProperties.class, CookieProperties.class, GoogleProperties.class, AppMailProperties.class})
 public class SecurityConfig {
 
     private static final int BCRYPT_STRENGTH = 12;

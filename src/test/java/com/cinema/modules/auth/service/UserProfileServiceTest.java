@@ -69,6 +69,9 @@ class UserProfileServiceTest {
     @Mock
     private AuthService authService;
 
+    @Mock
+    private BranchAccessService branchAccessService;
+
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(4);
     private UserProfileService userProfileService;
     private Role customerRole;
@@ -78,13 +81,14 @@ class UserProfileServiceTest {
     void setUp() {
         userProfileService = new UserProfileService(
                 userRepository, userIdentityRepository, refreshTokenRepository, passwordEncoder, authService,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                branchAccessService, Clock.fixed(NOW, ZoneOffset.UTC));
         customerRole = new Role();
         customerRole.setCode(Role.CUSTOMER);
         authSession = new AuthSession(
                 new UserResponse(USER_ID, "an@cinema.vn", "An", null, null, List.of(Role.CUSTOMER), 0, "STAR", false),
                 "access", Duration.ofMinutes(15), "refresh", Duration.ofDays(7));
         lenient().when(userIdentityRepository.findByUserId(USER_ID)).thenReturn(List.of());
+        lenient().when(branchAccessService.getAssignedBranches(USER_ID)).thenReturn(List.of());
         lenient().when(authService.openSession(any(User.class), any(ClientInfo.class))).thenReturn(authSession);
         lenient().when(userRepository.saveAndFlush(any(User.class)))
                 .thenAnswer(invocationOnMock -> invocationOnMock.getArgument(0));

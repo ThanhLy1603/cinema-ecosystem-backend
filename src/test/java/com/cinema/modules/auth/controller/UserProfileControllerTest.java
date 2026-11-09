@@ -52,7 +52,7 @@ class UserProfileControllerTest {
 
     private static final UserProfileResponse PROFILE = new UserProfileResponse(
             9L, "an@cinema.vn", "Nguyễn An", "0912345678", null, LocalDate.of(1995, 5, 20), "FEMALE",
-            List.of("ROLE_CUSTOMER"), 120, "GOLD", true, true, List.of("GOOGLE"));
+            List.of("ROLE_CUSTOMER"), 120, "GOLD", true, true, List.of("GOOGLE"), List.of());
 
     @Mock
     private UserProfileService userProfileService;
