@@ -17,9 +17,10 @@ import com.cinema.modules.auth.security.AuthenticatedUser;
 import com.cinema.modules.auth.security.RefreshTokenCookieFactory;
 import com.cinema.modules.auth.security.SessionCookieWriter;
 import com.cinema.modules.auth.service.AuthService;
-import com.cinema.modules.auth.service.EmailVerificationService;
-import com.cinema.modules.auth.service.GoogleAuthService;
-import com.cinema.modules.auth.service.PasswordResetService;
+import com.cinema.modules.auth.service.interfaces.IAuthService;
+import com.cinema.modules.auth.service.interfaces.IEmailVerificationService;
+import com.cinema.modules.auth.service.interfaces.IGoogleAuthService;
+import com.cinema.modules.auth.service.interfaces.IPasswordResetService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -43,17 +44,17 @@ public class AuthController {
     private static final String FORGOT_PASSWORD_MESSAGE =
             "Nếu email tồn tại trong hệ thống, chúng tôi đã gửi hướng dẫn đặt lại mật khẩu";
 
-    private final AuthService authService;
-    private final GoogleAuthService googleAuthService;
-    private final PasswordResetService passwordResetService;
-    private final EmailVerificationService emailVerificationService;
+    private final IAuthService authService;
+    private final IGoogleAuthService googleAuthService;
+    private final IPasswordResetService passwordResetService;
+    private final IEmailVerificationService emailVerificationService;
     private final SessionCookieWriter sessionCookieWriter;
 
     public AuthController(
-            AuthService authService,
-            GoogleAuthService googleAuthService,
-            PasswordResetService passwordResetService,
-            EmailVerificationService emailVerificationService,
+            IAuthService authService,
+            IGoogleAuthService googleAuthService,
+            IPasswordResetService passwordResetService,
+            IEmailVerificationService emailVerificationService,
             SessionCookieWriter sessionCookieWriter) {
         this.authService = authService;
         this.googleAuthService = googleAuthService;

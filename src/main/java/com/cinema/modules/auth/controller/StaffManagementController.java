@@ -6,7 +6,7 @@ import com.cinema.modules.auth.dto.request.CreateStaffRequest;
 import com.cinema.modules.auth.dto.request.UpdateStaffRequest;
 import com.cinema.modules.auth.dto.response.StaffResponse;
 import com.cinema.modules.auth.security.AuthenticatedUser;
-import com.cinema.modules.auth.service.StaffManagementService;
+import com.cinema.modules.auth.service.interfaces.IStaffManagementService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -26,13 +26,14 @@ import org.springframework.web.bind.annotation.RestController;
 @PreAuthorize("hasAuthority('ROLE_ADMIN')")
 public class StaffManagementController {
 
-    private final StaffManagementService staffManagementService;
+    private final IStaffManagementService staffManagementService;
 
-    public StaffManagementController(StaffManagementService staffManagementService) {
+    public StaffManagementController(IStaffManagementService staffManagementService) {
         this.staffManagementService = staffManagementService;
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_MANAGER')")
     public ResponseEntity<ApiResponse<StaffResponse>> createStaff(
             @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
             @Valid @RequestBody CreateStaffRequest createStaffRequest,

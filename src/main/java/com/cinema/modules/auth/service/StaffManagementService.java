@@ -11,12 +11,17 @@ import com.cinema.modules.auth.entity.User;
 import com.cinema.modules.auth.entity.UserBranchAssignment;
 import com.cinema.modules.auth.enums.AuditAction;
 import com.cinema.modules.auth.enums.StaffStatus;
+import com.cinema.modules.auth.enums.UserStatus;
 import com.cinema.modules.auth.repository.RefreshTokenRepository;
 import com.cinema.modules.auth.repository.RoleRepository;
 import com.cinema.modules.auth.repository.StaffProfileRepository;
 import com.cinema.modules.auth.repository.UserBranchAssignmentRepository;
 import com.cinema.modules.auth.repository.UserRepository;
-import com.cinema.modules.cinema.service.CinemaQueryService;
+import com.cinema.modules.auth.service.interfaces.IStaffManagementService;
+import com.cinema.modules.auth.service.interfaces.IBranchAccessService;
+import com.cinema.modules.auth.service.interfaces.IEmailVerificationService;
+import com.cinema.modules.auth.service.interfaces.IUserAuditService;
+import com.cinema.modules.cinema.service.interfaces.ICinemaQueryService;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -35,17 +40,17 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
-public class StaffManagementService {
+public class StaffManagementService implements IStaffManagementService {
 
     private final UserRepository userRepository;
     private final StaffProfileRepository staffProfileRepository;
     private final UserBranchAssignmentRepository userBranchAssignmentRepository;
     private final RoleRepository roleRepository;
     private final RefreshTokenRepository refreshTokenRepository;
-    private final CinemaQueryService cinemaQueryService;
-    private final BranchAccessService branchAccessService;
-    private final UserAuditService userAuditService;
-    private final EmailVerificationService emailVerificationService;
+    private final ICinemaQueryService cinemaQueryService;
+    private final IBranchAccessService branchAccessService;
+    private final IUserAuditService userAuditService;
+    private final IEmailVerificationService emailVerificationService;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
 
@@ -55,10 +60,10 @@ public class StaffManagementService {
             UserBranchAssignmentRepository userBranchAssignmentRepository,
             RoleRepository roleRepository,
             RefreshTokenRepository refreshTokenRepository,
-            CinemaQueryService cinemaQueryService,
-            BranchAccessService branchAccessService,
-            UserAuditService userAuditService,
-            EmailVerificationService emailVerificationService,
+            ICinemaQueryService cinemaQueryService,
+            IBranchAccessService branchAccessService,
+            IUserAuditService userAuditService,
+            IEmailVerificationService emailVerificationService,
             PasswordEncoder passwordEncoder,
             Clock clock) {
         this.userRepository = userRepository;
@@ -75,7 +80,9 @@ public class StaffManagementService {
     }
 
     @Transactional
+    @Override
     public StaffResponse createStaff(Long actorUserId, CreateStaffRequest createStaffRequest, String ipAddress) {
+        authorizeCreation(actorUserId, createStaffRequest.role(), new LinkedHashSet<>(createStaffRequest.cinemaIds()));
         String email = createStaffRequest.email().trim().toLowerCase(Locale.ROOT);
         String phone = normalizePhone(createStaffRequest.phone());
         String employeeCode = createStaffRequest.employeeCode().trim();
@@ -131,12 +138,14 @@ public class StaffManagementService {
     }
 
     @Transactional(readOnly = true)
+    @Override
     public StaffResponse getStaff(Long userId) {
         loadStaffUser(userId);
         return buildResponse(userId);
     }
 
     @Transactional
+    @Override
     public StaffResponse updateStaff(
             Long actorUserId, Long userId, UpdateStaffRequest updateStaffRequest, String ipAddress) {
         User user = loadStaffUser(userId);
@@ -182,6 +191,7 @@ public class StaffManagementService {
     }
 
     @Transactional
+    @Override
     public StaffResponse assignBranches(
             Long actorUserId, Long userId, AssignBranchesRequest assignBranchesRequest, String ipAddress) {
         User user = loadStaffUser(userId);
@@ -215,6 +225,26 @@ public class StaffManagementService {
 
         branchAccessService.evictAfterCommit(userId);
         return buildResponse(userId);
+    }
+
+    private void authorizeCreation(Long actorUserId, String roleCode, Set<Long> requestedCinemaIds) {
+        User actorUser = userRepository.findWithRolesById(actorUserId)
+                .filter(user -> user.getStatus() == UserStatus.ACTIVE)
+                .orElseThrow(StaffManagementService::accessDenied);
+        if (actorUser.hasRole(Role.ADMIN)) {
+            return;
+        }
+        if (!actorUser.hasRole(Role.MANAGER)) {
+            throw accessDenied();
+        }
+        if (!Role.STAFF.equals(roleCode)) {
+            throw new AppException("Quản lý chi nhánh chỉ được tạo tài khoản nhân viên (ROLE_STAFF)",
+                    HttpStatus.FORBIDDEN, "ROLE_ASSIGNMENT_FORBIDDEN");
+        }
+        if (!branchAccessService.getAccessibleCinemaIds(actorUserId).containsAll(requestedCinemaIds)) {
+            throw new AppException("Bạn không có quyền truy cập dữ liệu của chi nhánh này", HttpStatus.FORBIDDEN,
+                    "BRANCH_ACCESS_DENIED");
+        }
     }
 
     private void insertAssignments(User user, Long actorUserId, BranchSelection branchSelection) {
@@ -296,6 +326,10 @@ public class StaffManagementService {
 
     private static AppException employeeCodeAlreadyUsed() {
         return new AppException("Mã nhân viên đã được sử dụng", HttpStatus.CONFLICT, "EMPLOYEE_CODE_ALREADY_EXISTS");
+    }
+
+    private static AppException accessDenied() {
+        return new AppException("Bạn không có quyền thực hiện thao tác này", HttpStatus.FORBIDDEN, "ACCESS_DENIED");
     }
 
     private static AppException staffNotFound() {

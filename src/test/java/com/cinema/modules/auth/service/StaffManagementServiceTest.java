@@ -13,12 +13,16 @@ import com.cinema.modules.auth.entity.UserBranchAssignment;
 import com.cinema.modules.auth.enums.AuditAction;
 import com.cinema.modules.auth.enums.StaffPosition;
 import com.cinema.modules.auth.enums.StaffStatus;
+import com.cinema.modules.auth.enums.UserStatus;
 import com.cinema.modules.auth.repository.RefreshTokenRepository;
 import com.cinema.modules.auth.repository.RoleRepository;
 import com.cinema.modules.auth.repository.StaffProfileRepository;
 import com.cinema.modules.auth.repository.UserBranchAssignmentRepository;
 import com.cinema.modules.auth.repository.UserRepository;
-import com.cinema.modules.cinema.service.CinemaQueryService;
+import com.cinema.modules.auth.service.interfaces.IBranchAccessService;
+import com.cinema.modules.auth.service.interfaces.IEmailVerificationService;
+import com.cinema.modules.auth.service.interfaces.IUserAuditService;
+import com.cinema.modules.cinema.service.interfaces.ICinemaQueryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -62,6 +66,7 @@ class StaffManagementServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-11-09T03:00:00Z");
     private static final Long ACTOR_ID = 1L;
+    private static final Long MANAGER_ID = 2L;
     private static final Long USER_ID = 20L;
     private static final String IP_ADDRESS = "10.0.0.5";
 
@@ -81,16 +86,16 @@ class StaffManagementServiceTest {
     private RefreshTokenRepository refreshTokenRepository;
 
     @Mock
-    private CinemaQueryService cinemaQueryService;
+    private ICinemaQueryService cinemaQueryService;
 
     @Mock
-    private BranchAccessService branchAccessService;
+    private IBranchAccessService branchAccessService;
 
     @Mock
-    private UserAuditService userAuditService;
+    private IUserAuditService userAuditService;
 
     @Mock
-    private EmailVerificationService emailVerificationService;
+    private IEmailVerificationService emailVerificationService;
 
     @Captor
     private ArgumentCaptor<List<UserBranchAssignment>> assignmentsCaptor;
@@ -116,6 +121,8 @@ class StaffManagementServiceTest {
         customerRole = role(Role.CUSTOMER);
         actorUser = new User();
         actorUser.setId(ACTOR_ID);
+        actorUser.addRole(role(Role.ADMIN));
+        lenient().when(userRepository.findWithRolesById(ACTOR_ID)).thenReturn(Optional.of(actorUser));
         lenient().when(roleRepository.findByCode(Role.STAFF)).thenReturn(Optional.of(staffRole));
         lenient().when(roleRepository.findByCode(Role.MANAGER)).thenReturn(Optional.of(managerRole));
         lenient().when(userRepository.getReferenceById(ACTOR_ID)).thenReturn(actorUser);
@@ -256,6 +263,74 @@ class StaffManagementServiceTest {
         verify(userBranchAssignmentRepository).saveAll(assignmentsCaptor.capture());
         assertEquals(1, assignmentsCaptor.getValue().size());
         assertTrue(assignmentsCaptor.getValue().get(0).isPrimaryBranch());
+    }
+
+
+    private User managerActor(Set<Long> managedCinemaIds) {
+        User managerUser = new User();
+        managerUser.setId(MANAGER_ID);
+        managerUser.addRole(managerRole);
+        lenient().when(userRepository.findWithRolesById(MANAGER_ID)).thenReturn(Optional.of(managerUser));
+        lenient().when(userRepository.getReferenceById(MANAGER_ID)).thenReturn(managerUser);
+        lenient().when(branchAccessService.getAccessibleCinemaIds(MANAGER_ID)).thenReturn(managedCinemaIds);
+        return managerUser;
+    }
+
+    @Test
+    void managerCanCreateStaffInsideTheirOwnBranches() {
+        managerActor(Set.of(1L, 2L));
+        existingStaff(staffRole);
+        existingProfile();
+
+        staffManagementService.createStaff(MANAGER_ID, createRequest(List.of(1L), null), IP_ADDRESS);
+
+        verify(userBranchAssignmentRepository).saveAll(assignmentsCaptor.capture());
+        assertEquals(1L, assignmentsCaptor.getValue().get(0).getCinemaId());
+        verify(userAuditService).record(eq(MANAGER_ID), eq(USER_ID), eq(AuditAction.USER_CREATED),
+                any(), eq(IP_ADDRESS));
+    }
+
+    @Test
+    void managerCannotCreateAnotherManager() {
+        managerActor(Set.of(1L, 2L));
+        CreateStaffRequest createStaffRequest = new CreateStaffRequest(
+                "nv@cinema.vn", "Matkhau123", "Quản Lý", null, Role.MANAGER, "NV001", StaffPosition.MANAGER, null,
+                List.of(1L), null);
+
+        assertRejected(() -> staffManagementService.createStaff(MANAGER_ID, createStaffRequest, IP_ADDRESS),
+                HttpStatus.FORBIDDEN, "ROLE_ASSIGNMENT_FORBIDDEN");
+        assertNothingPersisted();
+    }
+
+    @Test
+    void managerCannotAssignBranchesThatTheyDoNotManage() {
+        managerActor(Set.of(1L));
+
+        assertRejected(() -> staffManagementService.createStaff(
+                MANAGER_ID, createRequest(List.of(1L, 2L), null), IP_ADDRESS),
+                HttpStatus.FORBIDDEN, "BRANCH_ACCESS_DENIED");
+        assertNothingPersisted();
+    }
+
+    @Test
+    void staffCustomerInactiveAndUnknownActorsCannotCreateStaff() {
+        User staffActor = new User();
+        staffActor.setId(MANAGER_ID);
+        staffActor.addRole(staffRole);
+        when(userRepository.findWithRolesById(MANAGER_ID)).thenReturn(Optional.of(staffActor));
+        assertRejected(() -> staffManagementService.createStaff(
+                MANAGER_ID, createRequest(List.of(1L), null), IP_ADDRESS), HttpStatus.FORBIDDEN, "ACCESS_DENIED");
+
+        staffActor.getRoles().clear();
+        staffActor.addRole(role(Role.ADMIN));
+        staffActor.setStatus(UserStatus.SUSPENDED);
+        assertRejected(() -> staffManagementService.createStaff(
+                MANAGER_ID, createRequest(List.of(1L), null), IP_ADDRESS), HttpStatus.FORBIDDEN, "ACCESS_DENIED");
+
+        when(userRepository.findWithRolesById(MANAGER_ID)).thenReturn(Optional.empty());
+        assertRejected(() -> staffManagementService.createStaff(
+                MANAGER_ID, createRequest(List.of(1L), null), IP_ADDRESS), HttpStatus.FORBIDDEN, "ACCESS_DENIED");
+        assertNothingPersisted();
     }
 
     @Test

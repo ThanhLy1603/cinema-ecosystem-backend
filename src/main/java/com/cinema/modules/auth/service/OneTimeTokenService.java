@@ -5,6 +5,7 @@ import com.cinema.modules.auth.entity.UserToken;
 import com.cinema.modules.auth.enums.UserTokenType;
 import com.cinema.modules.auth.repository.UserTokenRepository;
 import com.cinema.modules.auth.security.TokenHasher;
+import com.cinema.modules.auth.service.interfaces.IOneTimeTokenService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,7 +14,7 @@ import java.time.Instant;
 import java.util.Optional;
 
 @Service
-public class OneTimeTokenService {
+public class OneTimeTokenService implements IOneTimeTokenService {
 
     private static final int IP_ADDRESS_MAX_LENGTH = 45;
 
@@ -24,6 +25,7 @@ public class OneTimeTokenService {
     }
 
     @Transactional
+    @Override
     public String issue(User user, UserTokenType userTokenType, Duration ttl, String ipAddress, Instant now) {
         userTokenRepository.invalidateUnused(user.getId(), userTokenType, now);
 
@@ -39,6 +41,7 @@ public class OneTimeTokenService {
     }
 
     @Transactional
+    @Override
     public Optional<UserToken> findUsableForUpdate(String rawToken, UserTokenType userTokenType, Instant now) {
         if (rawToken == null || rawToken.isBlank()) {
             return Optional.empty();

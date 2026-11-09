@@ -13,7 +13,7 @@ import com.cinema.modules.auth.security.AccessTokenCookieFactory;
 import com.cinema.modules.auth.security.AuthenticatedUser;
 import com.cinema.modules.auth.security.RefreshTokenCookieFactory;
 import com.cinema.modules.auth.security.SessionCookieWriter;
-import com.cinema.modules.auth.service.UserProfileService;
+import com.cinema.modules.auth.service.interfaces.IUserProfileService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -55,7 +55,7 @@ class UserProfileControllerTest {
             List.of("ROLE_CUSTOMER"), 120, "GOLD", true, true, List.of("GOOGLE"), List.of());
 
     @Mock
-    private UserProfileService userProfileService;
+    private IUserProfileService userProfileService;
 
     private MockMvc mockMvc;
 

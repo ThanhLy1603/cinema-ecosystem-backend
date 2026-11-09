@@ -3,6 +3,7 @@ package com.cinema.modules.auth.service;
 import com.cinema.modules.auth.entity.UserAuditLog;
 import com.cinema.modules.auth.enums.AuditAction;
 import com.cinema.modules.auth.repository.UserAuditLogRepository;
+import com.cinema.modules.auth.service.interfaces.IUserAuditService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -10,7 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Map;
 
 @Service
-public class UserAuditService {
+public class UserAuditService implements IUserAuditService {
 
     private final UserAuditLogRepository userAuditLogRepository;
 
@@ -19,6 +20,7 @@ public class UserAuditService {
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
+    @Override
     public void record(
             Long actorId, Long targetUserId, AuditAction auditAction, Map<String, Object> details, String ipAddress) {
         UserAuditLog userAuditLog = new UserAuditLog();

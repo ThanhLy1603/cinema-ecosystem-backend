@@ -13,6 +13,9 @@ import com.cinema.modules.auth.model.ClientInfo;
 import com.cinema.modules.auth.repository.RefreshTokenRepository;
 import com.cinema.modules.auth.repository.UserIdentityRepository;
 import com.cinema.modules.auth.repository.UserRepository;
+import com.cinema.modules.auth.service.interfaces.IUserProfileService;
+import com.cinema.modules.auth.service.interfaces.IAuthService;
+import com.cinema.modules.auth.service.interfaces.IBranchAccessService;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -24,14 +27,14 @@ import java.time.Instant;
 import java.util.List;
 
 @Service
-public class UserProfileService {
+public class UserProfileService implements IUserProfileService {
 
     private final UserRepository userRepository;
     private final UserIdentityRepository userIdentityRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
-    private final AuthService authService;
-    private final BranchAccessService branchAccessService;
+    private final IAuthService authService;
+    private final IBranchAccessService branchAccessService;
     private final Clock clock;
 
     public UserProfileService(
@@ -39,8 +42,8 @@ public class UserProfileService {
             UserIdentityRepository userIdentityRepository,
             RefreshTokenRepository refreshTokenRepository,
             PasswordEncoder passwordEncoder,
-            AuthService authService,
-            BranchAccessService branchAccessService,
+            IAuthService authService,
+            IBranchAccessService branchAccessService,
             Clock clock) {
         this.userRepository = userRepository;
         this.userIdentityRepository = userIdentityRepository;
@@ -52,11 +55,13 @@ public class UserProfileService {
     }
 
     @Transactional(readOnly = true)
+    @Override
     public UserProfileResponse getProfile(Long userId) {
         return toProfileResponse(loadUsableUser(userId));
     }
 
     @Transactional
+    @Override
     public UserProfileResponse updateProfile(Long userId, UpdateProfileRequest updateProfileRequest) {
         User user = loadUsableUser(userId);
         String phone = normalizePhone(updateProfileRequest.phone());
@@ -79,6 +84,7 @@ public class UserProfileService {
     }
 
     @Transactional(noRollbackFor = AppException.class)
+    @Override
     public AuthSession changePassword(
             Long userId, ChangePasswordRequest changePasswordRequest, ClientInfo clientInfo) {
         Instant now = clock.instant();

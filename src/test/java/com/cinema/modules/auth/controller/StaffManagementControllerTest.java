@@ -7,7 +7,8 @@ import com.cinema.modules.auth.dto.request.CreateStaffRequest;
 import com.cinema.modules.auth.dto.response.BranchAssignmentResponse;
 import com.cinema.modules.auth.dto.response.StaffResponse;
 import com.cinema.modules.auth.security.AuthenticatedUser;
-import com.cinema.modules.auth.service.StaffManagementService;
+import com.cinema.modules.auth.service.interfaces.IStaffManagementService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -57,7 +58,7 @@ class StaffManagementControllerTest {
              "cinemaIds":[1,2],"primaryCinemaId":1}""";
 
     @Mock
-    private StaffManagementService staffManagementService;
+    private IStaffManagementService staffManagementService;
 
     private MockMvc mockMvc;
 
@@ -83,6 +84,17 @@ class StaffManagementControllerTest {
 
         assertNotNull(preAuthorize);
         assertEquals("hasAuthority('ROLE_ADMIN')", preAuthorize.value());
+    }
+
+    @Test
+    void creatingStaffIsAlsoOpenToManagersWhileEverythingElseStaysAdminOnly() throws Exception {
+        PreAuthorize createAuthorization = StaffManagementController.class
+                .getMethod("createStaff", AuthenticatedUser.class, CreateStaffRequest.class,
+                        HttpServletRequest.class)
+                .getAnnotation(PreAuthorize.class);
+
+        assertNotNull(createAuthorization);
+        assertEquals("hasAnyAuthority('ROLE_ADMIN', 'ROLE_MANAGER')", createAuthorization.value());
     }
 
     @Test

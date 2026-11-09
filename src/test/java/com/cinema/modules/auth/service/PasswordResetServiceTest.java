@@ -11,6 +11,7 @@ import com.cinema.modules.auth.enums.UserTokenType;
 import com.cinema.modules.auth.event.PasswordResetRequestedEvent;
 import com.cinema.modules.auth.repository.RefreshTokenRepository;
 import com.cinema.modules.auth.repository.UserRepository;
+import com.cinema.modules.auth.service.interfaces.IOneTimeTokenService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -54,7 +55,7 @@ class PasswordResetServiceTest {
     private RefreshTokenRepository refreshTokenRepository;
 
     @Mock
-    private OneTimeTokenService oneTimeTokenService;
+    private IOneTimeTokenService oneTimeTokenService;
 
     @Mock
     private RateLimiter rateLimiter;

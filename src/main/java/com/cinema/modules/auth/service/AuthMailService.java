@@ -3,6 +3,7 @@ package com.cinema.modules.auth.service;
 import com.cinema.config.AppMailProperties;
 import com.cinema.modules.auth.event.EmailVerificationRequestedEvent;
 import com.cinema.modules.auth.event.PasswordResetRequestedEvent;
+import com.cinema.modules.auth.service.interfaces.IAuthMailService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
@@ -14,7 +15,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 @Slf4j
 @Service
-public class AuthMailService {
+public class AuthMailService implements IAuthMailService {
 
     static final String PASSWORD_RESET_PATH = "/reset-password";
     static final String EMAIL_VERIFICATION_PATH = "/verify-email";
@@ -29,6 +30,7 @@ public class AuthMailService {
 
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    @Override
     public void onPasswordResetRequested(PasswordResetRequestedEvent passwordResetRequestedEvent) {
         String link = buildLink(PASSWORD_RESET_PATH, passwordResetRequestedEvent.rawToken());
         String body = "Xin chào " + passwordResetRequestedEvent.fullName() + ",\n\n"
@@ -42,6 +44,7 @@ public class AuthMailService {
 
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    @Override
     public void onEmailVerificationRequested(EmailVerificationRequestedEvent emailVerificationRequestedEvent) {
         String link = buildLink(EMAIL_VERIFICATION_PATH, emailVerificationRequestedEvent.rawToken());
         String body = "Xin chào " + emailVerificationRequestedEvent.fullName() + ",\n\n"

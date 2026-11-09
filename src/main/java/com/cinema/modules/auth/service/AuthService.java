@@ -16,6 +16,7 @@ import com.cinema.modules.auth.repository.RoleRepository;
 import com.cinema.modules.auth.repository.UserRepository;
 import com.cinema.modules.auth.security.JwtTokenProvider;
 import com.cinema.modules.auth.security.TokenHasher;
+import com.cinema.modules.auth.service.interfaces.IAuthService;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -31,7 +32,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Service
-public class AuthService {
+public class AuthService implements IAuthService {
 
     static final int MAX_FAILED_LOGIN_ATTEMPTS = 5;
     static final Duration LOCK_DURATION = Duration.ofMinutes(15);
@@ -69,6 +70,7 @@ public class AuthService {
     }
 
     @Transactional
+    @Override
     public UserResponse register(RegisterRequest registerRequest) {
         String email = normalizeEmail(registerRequest.email());
         String phone = normalizePhone(registerRequest.phone());
@@ -101,6 +103,7 @@ public class AuthService {
     }
 
     @Transactional(noRollbackFor = AppException.class)
+    @Override
     public AuthSession login(LoginRequest loginRequest, ClientInfo clientInfo) {
         Instant now = clock.instant();
         String email = normalizeEmail(loginRequest.email());
@@ -134,6 +137,7 @@ public class AuthService {
     }
 
     @Transactional
+    @Override
     public AuthSession openSession(User user, ClientInfo clientInfo) {
         String rawRefreshToken = TokenHasher.generateRandomToken();
         saveRefreshToken(user, rawRefreshToken, UUID.randomUUID(), clientInfo, clock.instant());
@@ -141,6 +145,7 @@ public class AuthService {
     }
 
     @Transactional(noRollbackFor = AppException.class)
+    @Override
     public AuthSession refresh(String rawRefreshToken, ClientInfo clientInfo) {
         if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
             throw invalidRefreshToken();
@@ -181,6 +186,7 @@ public class AuthService {
     }
 
     @Transactional
+    @Override
     public void logout(String rawRefreshToken) {
         if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
             return;
@@ -191,6 +197,7 @@ public class AuthService {
     }
 
     @Transactional
+    @Override
     public void logoutAll(Long userId) {
         refreshTokenRepository.revokeAllByUserId(userId, clock.instant());
     }

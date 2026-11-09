@@ -16,6 +16,8 @@ import com.cinema.modules.auth.model.ClientInfo;
 import com.cinema.modules.auth.repository.RefreshTokenRepository;
 import com.cinema.modules.auth.repository.UserIdentityRepository;
 import com.cinema.modules.auth.repository.UserRepository;
+import com.cinema.modules.auth.service.interfaces.IAuthService;
+import com.cinema.modules.auth.service.interfaces.IBranchAccessService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -67,10 +69,10 @@ class UserProfileServiceTest {
     private RefreshTokenRepository refreshTokenRepository;
 
     @Mock
-    private AuthService authService;
+    private IAuthService authService;
 
     @Mock
-    private BranchAccessService branchAccessService;
+    private IBranchAccessService branchAccessService;
 
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(4);
     private UserProfileService userProfileService;

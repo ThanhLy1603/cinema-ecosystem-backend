@@ -7,7 +7,8 @@ import com.cinema.modules.auth.entity.User;
 import com.cinema.modules.auth.entity.UserBranchAssignment;
 import com.cinema.modules.auth.repository.UserBranchAssignmentRepository;
 import com.cinema.modules.auth.repository.UserRepository;
-import com.cinema.modules.cinema.service.CinemaQueryService;
+import com.cinema.modules.auth.service.interfaces.IBranchAccessService;
+import com.cinema.modules.cinema.service.interfaces.ICinemaQueryService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
@@ -26,7 +27,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-public class BranchAccessService {
+public class BranchAccessService implements IBranchAccessService {
 
     static final Duration CACHE_TTL = Duration.ofMinutes(5);
     static final String CACHE_KEY_PREFIX = "branch-access:";
@@ -35,13 +36,13 @@ public class BranchAccessService {
 
     private final UserRepository userRepository;
     private final UserBranchAssignmentRepository userBranchAssignmentRepository;
-    private final CinemaQueryService cinemaQueryService;
+    private final ICinemaQueryService cinemaQueryService;
     private final StringRedisTemplate stringRedisTemplate;
 
     public BranchAccessService(
             UserRepository userRepository,
             UserBranchAssignmentRepository userBranchAssignmentRepository,
-            CinemaQueryService cinemaQueryService,
+            ICinemaQueryService cinemaQueryService,
             StringRedisTemplate stringRedisTemplate) {
         this.userRepository = userRepository;
         this.userBranchAssignmentRepository = userBranchAssignmentRepository;
@@ -49,6 +50,7 @@ public class BranchAccessService {
         this.stringRedisTemplate = stringRedisTemplate;
     }
 
+    @Override
     public Set<Long> getAccessibleCinemaIds(Long userId) {
         Optional<Set<Long>> optionalAssignedCinemaIds = resolveAssignedCinemaIds(userId);
         if (optionalAssignedCinemaIds.isEmpty()) {
@@ -57,10 +59,12 @@ public class BranchAccessService {
         return optionalAssignedCinemaIds.get();
     }
 
+    @Override
     public boolean hasAccessToAllCinemas(Long userId) {
         return resolveAssignedCinemaIds(userId).isEmpty();
     }
 
+    @Override
     public boolean canAccessCinema(Long userId, Long cinemaId) {
         if (cinemaId == null) {
             return false;
@@ -70,6 +74,7 @@ public class BranchAccessService {
                 .orElse(true);
     }
 
+    @Override
     public void assertCanAccessCinema(Long userId, Long cinemaId) {
         if (!canAccessCinema(userId, cinemaId)) {
             throw new AppException("Bạn không có quyền truy cập dữ liệu của chi nhánh này", HttpStatus.FORBIDDEN,
@@ -77,6 +82,7 @@ public class BranchAccessService {
         }
     }
 
+    @Override
     public List<BranchAssignmentResponse> getAssignedBranches(Long userId) {
         List<UserBranchAssignment> userBranchAssignments = userBranchAssignmentRepository.findByUserId(userId);
         Set<Long> cinemaIds = userBranchAssignments.stream()
@@ -93,6 +99,7 @@ public class BranchAccessService {
                 .toList();
     }
 
+    @Override
     public void evict(Long userId) {
         try {
             stringRedisTemplate.delete(cacheKey(userId));
@@ -101,6 +108,7 @@ public class BranchAccessService {
         }
     }
 
+    @Override
     public void evictAfterCommit(Long userId) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             evict(userId);

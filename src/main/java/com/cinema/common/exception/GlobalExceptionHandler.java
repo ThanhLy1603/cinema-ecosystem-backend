@@ -12,6 +12,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.Instant;
@@ -65,6 +66,14 @@ public class GlobalExceptionHandler {
             HttpMessageNotReadableException httpMessageNotReadableException) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error("Nội dung yêu cầu không hợp lệ", "INVALID_REQUEST_BODY"));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleArgumentTypeMismatch(
+            MethodArgumentTypeMismatchException methodArgumentTypeMismatchException) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error("Tham số '" + methodArgumentTypeMismatchException.getName()
+                        + "' không hợp lệ", "INVALID_PARAMETER"));
     }
 
     @ExceptionHandler(NoResourceFoundException.class)

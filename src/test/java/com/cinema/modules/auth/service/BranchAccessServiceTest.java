@@ -7,7 +7,7 @@ import com.cinema.modules.auth.entity.User;
 import com.cinema.modules.auth.entity.UserBranchAssignment;
 import com.cinema.modules.auth.repository.UserBranchAssignmentRepository;
 import com.cinema.modules.auth.repository.UserRepository;
-import com.cinema.modules.cinema.service.CinemaQueryService;
+import com.cinema.modules.cinema.service.interfaces.ICinemaQueryService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -53,7 +53,7 @@ class BranchAccessServiceTest {
     private UserBranchAssignmentRepository userBranchAssignmentRepository;
 
     @Mock
-    private CinemaQueryService cinemaQueryService;
+    private ICinemaQueryService cinemaQueryService;
 
     @Mock
     private StringRedisTemplate stringRedisTemplate;

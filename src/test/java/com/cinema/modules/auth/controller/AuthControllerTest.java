@@ -17,9 +17,10 @@ import com.cinema.modules.auth.security.AuthenticatedUser;
 import com.cinema.modules.auth.security.RefreshTokenCookieFactory;
 import com.cinema.modules.auth.security.SessionCookieWriter;
 import com.cinema.modules.auth.service.AuthService;
-import com.cinema.modules.auth.service.EmailVerificationService;
-import com.cinema.modules.auth.service.GoogleAuthService;
-import com.cinema.modules.auth.service.PasswordResetService;
+import com.cinema.modules.auth.service.interfaces.IAuthService;
+import com.cinema.modules.auth.service.interfaces.IEmailVerificationService;
+import com.cinema.modules.auth.service.interfaces.IGoogleAuthService;
+import com.cinema.modules.auth.service.interfaces.IPasswordResetService;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,16 +65,16 @@ class AuthControllerTest {
     private static final String LOGIN_BODY = "{\"email\":\"an@cinema.vn\",\"password\":\"Matkhau123\"}";
 
     @Mock
-    private AuthService authService;
+    private IAuthService authService;
 
     @Mock
-    private GoogleAuthService googleAuthService;
+    private IGoogleAuthService googleAuthService;
 
     @Mock
-    private PasswordResetService passwordResetService;
+    private IPasswordResetService passwordResetService;
 
     @Mock
-    private EmailVerificationService emailVerificationService;
+    private IEmailVerificationService emailVerificationService;
 
     private MockMvc mockMvc;
 

@@ -9,7 +9,7 @@ import com.cinema.modules.auth.model.AuthSession;
 import com.cinema.modules.auth.model.ClientInfo;
 import com.cinema.modules.auth.security.AuthenticatedUser;
 import com.cinema.modules.auth.security.SessionCookieWriter;
-import com.cinema.modules.auth.service.UserProfileService;
+import com.cinema.modules.auth.service.interfaces.IUserProfileService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
@@ -25,10 +25,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/users/me")
 public class UserProfileController {
 
-    private final UserProfileService userProfileService;
+    private final IUserProfileService userProfileService;
     private final SessionCookieWriter sessionCookieWriter;
 
-    public UserProfileController(UserProfileService userProfileService, SessionCookieWriter sessionCookieWriter) {
+    public UserProfileController(IUserProfileService userProfileService, SessionCookieWriter sessionCookieWriter) {
         this.userProfileService = userProfileService;
         this.sessionCookieWriter = sessionCookieWriter;
     }

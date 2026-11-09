@@ -15,6 +15,7 @@ import com.cinema.modules.auth.repository.RoleRepository;
 import com.cinema.modules.auth.repository.UserIdentityRepository;
 import com.cinema.modules.auth.repository.UserRepository;
 import com.cinema.modules.auth.security.GoogleIdTokenVerifier;
+import com.cinema.modules.auth.service.interfaces.IAuthService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -64,7 +65,7 @@ class GoogleAuthServiceTest {
     private RoleRepository roleRepository;
 
     @Mock
-    private AuthService authService;
+    private IAuthService authService;
 
     private GoogleAuthService googleAuthService;
     private Role customerRole;

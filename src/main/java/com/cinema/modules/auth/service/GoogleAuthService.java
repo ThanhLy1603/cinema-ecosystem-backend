@@ -14,6 +14,8 @@ import com.cinema.modules.auth.repository.RoleRepository;
 import com.cinema.modules.auth.repository.UserIdentityRepository;
 import com.cinema.modules.auth.repository.UserRepository;
 import com.cinema.modules.auth.security.GoogleIdTokenVerifier;
+import com.cinema.modules.auth.service.interfaces.IGoogleAuthService;
+import com.cinema.modules.auth.service.interfaces.IAuthService;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -25,7 +27,7 @@ import java.util.Locale;
 import java.util.Optional;
 
 @Service
-public class GoogleAuthService {
+public class GoogleAuthService implements IGoogleAuthService {
 
     private static final int EMAIL_MAX_LENGTH = 150;
     private static final int FULL_NAME_MAX_LENGTH = 150;
@@ -35,7 +37,7 @@ public class GoogleAuthService {
     private final UserRepository userRepository;
     private final UserIdentityRepository userIdentityRepository;
     private final RoleRepository roleRepository;
-    private final AuthService authService;
+    private final IAuthService authService;
     private final Clock clock;
 
     public GoogleAuthService(
@@ -43,7 +45,7 @@ public class GoogleAuthService {
             UserRepository userRepository,
             UserIdentityRepository userIdentityRepository,
             RoleRepository roleRepository,
-            AuthService authService,
+            IAuthService authService,
             Clock clock) {
         this.googleIdTokenVerifier = googleIdTokenVerifier;
         this.userRepository = userRepository;
@@ -54,6 +56,7 @@ public class GoogleAuthService {
     }
 
     @Transactional
+    @Override
     public AuthSession login(GoogleLoginRequest googleLoginRequest, ClientInfo clientInfo) {
         GoogleProfile googleProfile = googleIdTokenVerifier.verify(googleLoginRequest.idToken());
         String email = googleProfile.email().trim().toLowerCase(Locale.ROOT);

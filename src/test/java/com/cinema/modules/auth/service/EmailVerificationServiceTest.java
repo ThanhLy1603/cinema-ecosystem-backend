@@ -9,6 +9,7 @@ import com.cinema.modules.auth.enums.UserStatus;
 import com.cinema.modules.auth.enums.UserTokenType;
 import com.cinema.modules.auth.event.EmailVerificationRequestedEvent;
 import com.cinema.modules.auth.repository.UserRepository;
+import com.cinema.modules.auth.service.interfaces.IOneTimeTokenService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -48,7 +49,7 @@ class EmailVerificationServiceTest {
     private UserRepository userRepository;
 
     @Mock
-    private OneTimeTokenService oneTimeTokenService;
+    private IOneTimeTokenService oneTimeTokenService;
 
     @Mock
     private RateLimiter rateLimiter;

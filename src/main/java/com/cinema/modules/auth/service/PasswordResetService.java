@@ -12,6 +12,8 @@ import com.cinema.modules.auth.event.PasswordResetRequestedEvent;
 import com.cinema.modules.auth.repository.RefreshTokenRepository;
 import com.cinema.modules.auth.repository.UserRepository;
 import com.cinema.modules.auth.security.TokenHasher;
+import com.cinema.modules.auth.service.interfaces.IPasswordResetService;
+import com.cinema.modules.auth.service.interfaces.IOneTimeTokenService;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -25,7 +27,7 @@ import java.util.Locale;
 import java.util.Optional;
 
 @Service
-public class PasswordResetService {
+public class PasswordResetService implements IPasswordResetService {
 
     static final Duration TOKEN_TTL = Duration.ofMinutes(30);
     static final Duration RATE_LIMIT_WINDOW = Duration.ofHours(1);
@@ -33,7 +35,7 @@ public class PasswordResetService {
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
-    private final OneTimeTokenService oneTimeTokenService;
+    private final IOneTimeTokenService oneTimeTokenService;
     private final PasswordEncoder passwordEncoder;
     private final RateLimiter rateLimiter;
     private final ApplicationEventPublisher applicationEventPublisher;
@@ -42,7 +44,7 @@ public class PasswordResetService {
     public PasswordResetService(
             UserRepository userRepository,
             RefreshTokenRepository refreshTokenRepository,
-            OneTimeTokenService oneTimeTokenService,
+            IOneTimeTokenService oneTimeTokenService,
             PasswordEncoder passwordEncoder,
             RateLimiter rateLimiter,
             ApplicationEventPublisher applicationEventPublisher,
@@ -57,6 +59,7 @@ public class PasswordResetService {
     }
 
     @Transactional
+    @Override
     public void requestReset(ForgotPasswordRequest forgotPasswordRequest, String ipAddress) {
         String email = forgotPasswordRequest.email().trim().toLowerCase(Locale.ROOT);
         String rateLimitKey = "forgot-password:" + TokenHasher.sha256Hex(email);
@@ -77,6 +80,7 @@ public class PasswordResetService {
     }
 
     @Transactional
+    @Override
     public void resetPassword(ResetPasswordRequest resetPasswordRequest) {
         Instant now = clock.instant();
         UserToken userToken = oneTimeTokenService

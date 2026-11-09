@@ -9,6 +9,8 @@ import com.cinema.modules.auth.enums.UserStatus;
 import com.cinema.modules.auth.enums.UserTokenType;
 import com.cinema.modules.auth.event.EmailVerificationRequestedEvent;
 import com.cinema.modules.auth.repository.UserRepository;
+import com.cinema.modules.auth.service.interfaces.IEmailVerificationService;
+import com.cinema.modules.auth.service.interfaces.IOneTimeTokenService;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -19,21 +21,21 @@ import java.time.Duration;
 import java.time.Instant;
 
 @Service
-public class EmailVerificationService {
+public class EmailVerificationService implements IEmailVerificationService {
 
     static final Duration TOKEN_TTL = Duration.ofHours(24);
     static final Duration RATE_LIMIT_WINDOW = Duration.ofHours(1);
     static final int MAX_RESENDS_PER_WINDOW = 3;
 
     private final UserRepository userRepository;
-    private final OneTimeTokenService oneTimeTokenService;
+    private final IOneTimeTokenService oneTimeTokenService;
     private final RateLimiter rateLimiter;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final Clock clock;
 
     public EmailVerificationService(
             UserRepository userRepository,
-            OneTimeTokenService oneTimeTokenService,
+            IOneTimeTokenService oneTimeTokenService,
             RateLimiter rateLimiter,
             ApplicationEventPublisher applicationEventPublisher,
             Clock clock) {
@@ -45,6 +47,7 @@ public class EmailVerificationService {
     }
 
     @Transactional
+    @Override
     public void sendVerification(Long userId, String ipAddress) {
         User user = loadUser(userId);
         if (user.isEmailVerified()) {
@@ -58,6 +61,7 @@ public class EmailVerificationService {
     }
 
     @Transactional
+    @Override
     public void resendVerification(Long userId, String ipAddress) {
         User user = loadUser(userId);
         if (user.isEmailVerified()) {
@@ -71,6 +75,7 @@ public class EmailVerificationService {
     }
 
     @Transactional
+    @Override
     public void verifyEmail(VerifyEmailRequest verifyEmailRequest) {
         Instant now = clock.instant();
         UserToken userToken = oneTimeTokenService
