@@ -31,7 +31,9 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -88,15 +90,15 @@ class CinemaAdminServiceTest {
         cinema.setCity("Hồ Chí Minh");
         cinema.setAddress("Q1");
         cinema.setStatus(CinemaStatus.ACTIVE);
-        lenient().when(hallRepository.findByCinemaIdOrderByNameAsc(any())).thenReturn(List.of());
+        lenient().when(hallRepository.findByCinemaIdAndDeletedOrderByNameAsc(any(), eq(false))).thenReturn(List.of());
         lenient().when(cinemaRepository.saveAndFlush(any(Cinema.class)))
                 .thenAnswer(invocationOnMock -> invocationOnMock.getArgument(0));
     }
 
     @Test
     void createCinemaAddsSuffixWhenSlugIsTaken() {
-        when(cinemaRepository.existsBySlug("rap-moi")).thenReturn(true);
-        when(cinemaRepository.existsBySlug("rap-moi-2")).thenReturn(false);
+        when(cinemaRepository.existsBySlugAndDeletedFalse("rap-moi")).thenReturn(true);
+        when(cinemaRepository.existsBySlugAndDeletedFalse("rap-moi-2")).thenReturn(false);
 
         CinemaDetailResponse cinemaDetailResponse =
                 cinemaAdminService.createCinema(request("Rạp Mới", CinemaStatus.ACTIVE, null, null));
@@ -117,20 +119,10 @@ class CinemaAdminServiceTest {
     }
 
     @Test
-    void createCinemaRejectsDeletedStatus() {
-        CinemaRequest cinemaRequest = request("Rạp Mới", CinemaStatus.DELETED, null, null);
-
-        AppException appException =
-                assertThrows(AppException.class, () -> cinemaAdminService.createCinema(cinemaRequest));
-
-        assertEquals("INVALID_STATUS", appException.getErrorCode());
-    }
-
-    @Test
     void createCinemaRejectsUnknownFacility() {
         CinemaRequest cinemaRequest = new CinemaRequest(
                 "Rạp Mới", "Hà Nội", "Địa chỉ", null, null, null, CinemaStatus.ACTIVE, List.of(1L, 2L));
-        when(cinemaFacilityRepository.findAllById(Set.of(1L, 2L))).thenReturn(List.of());
+        when(cinemaFacilityRepository.findAllByIdInAndDeletedFalse(Set.of(1L, 2L))).thenReturn(List.of());
 
         AppException appException =
                 assertThrows(AppException.class, () -> cinemaAdminService.createCinema(cinemaRequest));
@@ -140,7 +132,7 @@ class CinemaAdminServiceTest {
 
     @Test
     void managerCannotChangeCinemaStatus() {
-        when(cinemaRepository.findWithFacilitiesById(CINEMA_ID)).thenReturn(Optional.of(cinema));
+        when(cinemaRepository.findWithFacilitiesByIdAndDeleted(CINEMA_ID, false)).thenReturn(Optional.of(cinema));
         when(cinemaAccessGuard.isGlobalAdmin(USER_ID)).thenReturn(false);
         CinemaRequest cinemaRequest = request(cinema.getName(), CinemaStatus.INACTIVE, null, null);
 
@@ -154,7 +146,7 @@ class CinemaAdminServiceTest {
 
     @Test
     void managerCanEditCinemaInfoWithoutChangingStatus() {
-        when(cinemaRepository.findWithFacilitiesById(CINEMA_ID)).thenReturn(Optional.of(cinema));
+        when(cinemaRepository.findWithFacilitiesByIdAndDeleted(CINEMA_ID, false)).thenReturn(Optional.of(cinema));
         CinemaRequest cinemaRequest = request("Tên mới", CinemaStatus.ACTIVE, null, null);
 
         CinemaDetailResponse cinemaDetailResponse = cinemaAdminService.updateCinema(USER_ID, CINEMA_ID, cinemaRequest);
@@ -165,8 +157,8 @@ class CinemaAdminServiceTest {
 
     @Test
     void deleteCinemaRefusesWhenShowtimesAreStillUpcoming() {
-        when(cinemaRepository.findById(CINEMA_ID)).thenReturn(Optional.of(cinema));
-        when(hallUsageChecker.countUpcomingShowtimes(eq(CINEMA_ID), eq(NOW))).thenReturn(3L);
+        when(cinemaRepository.findByIdAndDeleted(CINEMA_ID, false)).thenReturn(Optional.of(cinema));
+        when(hallUsageChecker.countUpcomingShowtimesByCinema(eq(CINEMA_ID), eq(NOW))).thenReturn(3L);
 
         AppException appException =
                 assertThrows(AppException.class, () -> cinemaAdminService.deleteCinema(CINEMA_ID));
@@ -177,14 +169,64 @@ class CinemaAdminServiceTest {
 
     @Test
     void deleteCinemaIsASoftDelete() {
-        when(cinemaRepository.findById(CINEMA_ID)).thenReturn(Optional.of(cinema));
-        when(hallUsageChecker.countUpcomingShowtimes(eq(CINEMA_ID), eq(NOW))).thenReturn(0L);
+        when(cinemaRepository.findByIdAndDeleted(CINEMA_ID, false)).thenReturn(Optional.of(cinema));
+        when(hallUsageChecker.countUpcomingShowtimesByCinema(eq(CINEMA_ID), eq(NOW))).thenReturn(0L);
 
         cinemaAdminService.deleteCinema(CINEMA_ID);
 
-        assertEquals(CinemaStatus.DELETED, cinema.getStatus());
+        assertTrue(cinema.isDeleted());
+        assertEquals(NOW, cinema.getDeletedAt());
+        assertEquals(CinemaStatus.ACTIVE, cinema.getStatus());
         verify(cinemaRepository).save(cinema);
+        verify(cinemaRepository, never()).delete(any(Cinema.class));
         verify(publicCinemaCache).evictAfterCommit();
+    }
+
+    @Test
+    void deletingAnAlreadyDeletedCinemaIsNotFound() {
+        when(cinemaRepository.findByIdAndDeleted(CINEMA_ID, false)).thenReturn(Optional.empty());
+
+        AppException appException =
+                assertThrows(AppException.class, () -> cinemaAdminService.deleteCinema(CINEMA_ID));
+
+        assertEquals("CINEMA_NOT_FOUND", appException.getErrorCode());
+        verify(hallUsageChecker, never()).countUpcomingShowtimesByCinema(any(), any());
+    }
+
+    @Test
+    void restoreCinemaKeepsItsSlugWhenFree() {
+        cinema.markDeleted(NOW);
+        when(cinemaRepository.findWithFacilitiesByIdAndDeleted(CINEMA_ID, true)).thenReturn(Optional.of(cinema));
+        when(cinemaRepository.existsBySlugAndDeletedFalse("star-cineplex-bitexco")).thenReturn(false);
+
+        CinemaDetailResponse cinemaDetailResponse = cinemaAdminService.restoreCinema(CINEMA_ID);
+
+        assertFalse(cinema.isDeleted());
+        assertFalse(cinemaDetailResponse.deleted());
+        assertEquals("star-cineplex-bitexco", cinemaDetailResponse.slug());
+        verify(publicCinemaCache).evictAfterCommit();
+    }
+
+    @Test
+    void restoreCinemaGeneratesANewSlugWhenAnActiveCinemaTookIt() {
+        cinema.markDeleted(NOW);
+        when(cinemaRepository.findWithFacilitiesByIdAndDeleted(CINEMA_ID, true)).thenReturn(Optional.of(cinema));
+        when(cinemaRepository.existsBySlugAndDeletedFalse("star-cineplex-bitexco")).thenReturn(true);
+        when(cinemaRepository.existsBySlugAndDeletedFalse("star-cineplex-bitexco-2")).thenReturn(false);
+
+        CinemaDetailResponse cinemaDetailResponse = cinemaAdminService.restoreCinema(CINEMA_ID);
+
+        assertEquals("star-cineplex-bitexco-2", cinemaDetailResponse.slug());
+    }
+
+    @Test
+    void restoringACinemaThatIsNotDeletedIsNotFound() {
+        when(cinemaRepository.findWithFacilitiesByIdAndDeleted(CINEMA_ID, true)).thenReturn(Optional.empty());
+
+        AppException appException =
+                assertThrows(AppException.class, () -> cinemaAdminService.restoreCinema(CINEMA_ID));
+
+        assertEquals("CINEMA_NOT_FOUND", appException.getErrorCode());
     }
 
     @Test
@@ -196,7 +238,7 @@ class CinemaAdminServiceTest {
         when(cinemaRepository.findWithFacilitiesByIdIn(List.of(CINEMA_ID))).thenReturn(List.of(cinema));
 
         PageResponse<CinemaResponse> pageResponse =
-                cinemaAdminService.searchCinemas(USER_ID, null, null, null, 0, 20);
+                cinemaAdminService.searchCinemas(USER_ID, null, null, null, false, 0, 20);
 
         assertEquals(1, pageResponse.content().size());
         verify(branchAccessService).getAccessibleCinemaIds(USER_ID);
@@ -209,7 +251,7 @@ class CinemaAdminServiceTest {
         when(cinemaRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(cinemaPage);
 
         PageResponse<CinemaResponse> pageResponse =
-                cinemaAdminService.searchCinemas(USER_ID, null, null, null, 0, 10_000);
+                cinemaAdminService.searchCinemas(USER_ID, null, null, null, false, 0, 10_000);
 
         assertEquals(0, pageResponse.content().size());
         verify(branchAccessService, never()).getAccessibleCinemaIds(USER_ID);

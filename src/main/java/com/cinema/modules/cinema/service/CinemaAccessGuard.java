@@ -4,7 +4,6 @@ import com.cinema.common.exception.AppException;
 import com.cinema.modules.auth.service.interfaces.IBranchAccessService;
 import com.cinema.modules.cinema.entity.Cinema;
 import com.cinema.modules.cinema.entity.Hall;
-import com.cinema.modules.cinema.enums.CinemaStatus;
 import com.cinema.modules.cinema.repository.CinemaRepository;
 import com.cinema.modules.cinema.repository.HallRepository;
 import org.springframework.http.HttpStatus;
@@ -27,16 +26,26 @@ public class CinemaAccessGuard {
     }
 
     public Cinema requireAccessibleCinema(Long actorUserId, Long cinemaId) {
-        Cinema cinema = cinemaRepository.findById(cinemaId)
-                .filter(foundCinema -> foundCinema.getStatus() != CinemaStatus.DELETED)
-                .orElseThrow(CinemaAccessGuard::cinemaNotFound);
+        Cinema cinema = cinemaRepository.findByIdAndDeleted(cinemaId, false).orElseThrow(CinemaAccessGuard::cinemaNotFound);
         branchAccessService.assertCanAccessCinema(actorUserId, cinema.getId());
         return cinema;
     }
 
     public Hall requireAccessibleHall(Long actorUserId, Long hallId) {
-        Hall hall = hallRepository.findById(hallId).orElseThrow(CinemaAccessGuard::hallNotFound);
+        Hall hall = hallRepository.findByIdAndDeleted(hallId, false).orElseThrow(CinemaAccessGuard::hallNotFound);
         requireAccessibleCinema(actorUserId, hall.getCinemaId());
+        return hall;
+    }
+
+    public Hall requireDeletedHallOfActiveCinema(Long actorUserId, Long hallId) {
+        Hall hall = hallRepository.findByIdAndDeleted(hallId, true).orElseThrow(CinemaAccessGuard::hallNotFound);
+        branchAccessService.assertCanAccessCinema(actorUserId, hall.getCinemaId());
+        if (cinemaRepository.findByIdAndDeleted(hall.getCinemaId(), false).isEmpty()) {
+            throw new AppException(
+                    "Cụm rạp của phòng chiếu này đã bị xóa, hãy khôi phục cụm rạp trước",
+                    HttpStatus.CONFLICT,
+                    "CINEMA_DELETED");
+        }
         return hall;
     }
 

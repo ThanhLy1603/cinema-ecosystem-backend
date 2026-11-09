@@ -2,6 +2,7 @@ package com.cinema.modules.cinema.specification;
 
 import com.cinema.modules.cinema.entity.Cinema;
 import com.cinema.modules.cinema.enums.CinemaStatus;
+import com.cinema.common.specification.SoftDeleteSpecifications;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.util.Collection;
@@ -13,8 +14,9 @@ public final class CinemaSpecifications {
     }
 
     public static Specification<Cinema> search(
-            String keyword, String city, CinemaStatus status, Collection<Long> cinemaIds) {
-        Specification<Cinema> specification = Specification.where(statusFilter(status));
+            String keyword, String city, CinemaStatus status, Collection<Long> cinemaIds, boolean deleted) {
+        Specification<Cinema> specification = Specification.where(SoftDeleteSpecifications.<Cinema>deletedIs(deleted));
+        specification = specification.and(statusFilter(status));
         specification = specification.and(keywordFilter(keyword));
         specification = specification.and(cityFilter(city));
         specification = specification.and(cinemaIdFilter(cinemaIds));
@@ -22,9 +24,10 @@ public final class CinemaSpecifications {
     }
 
     static Specification<Cinema> statusFilter(CinemaStatus status) {
-        return (cinema, criteriaQuery, criteriaBuilder) -> status == null
-                ? criteriaBuilder.notEqual(cinema.get("status"), CinemaStatus.DELETED)
-                : criteriaBuilder.equal(cinema.get("status"), status);
+        if (status == null) {
+            return null;
+        }
+        return (cinema, criteriaQuery, criteriaBuilder) -> criteriaBuilder.equal(cinema.get("status"), status);
     }
 
     static Specification<Cinema> keywordFilter(String keyword) {

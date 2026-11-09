@@ -9,7 +9,7 @@ import com.cinema.modules.cinema.enums.CinemaStatus;
 public interface ICinemaAdminService {
 
     PageResponse<CinemaResponse> searchCinemas(
-            Long actorUserId, String keyword, String city, CinemaStatus status, int page, int size);
+            Long actorUserId, String keyword, String city, CinemaStatus status, boolean deleted, int page, int size);
 
     CinemaDetailResponse getCinema(Long actorUserId, Long cinemaId);
 
@@ -18,4 +18,6 @@ public interface ICinemaAdminService {
     CinemaDetailResponse updateCinema(Long actorUserId, Long cinemaId, CinemaRequest cinemaRequest);
 
     void deleteCinema(Long cinemaId);
+
+    CinemaDetailResponse restoreCinema(Long cinemaId);
 }

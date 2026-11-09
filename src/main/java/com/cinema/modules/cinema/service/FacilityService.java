@@ -12,6 +12,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 
 @Service
@@ -19,16 +21,19 @@ public class FacilityService implements IFacilityService {
 
     private final CinemaFacilityRepository cinemaFacilityRepository;
     private final PublicCinemaCache publicCinemaCache;
+    private final Clock clock;
 
-    public FacilityService(CinemaFacilityRepository cinemaFacilityRepository, PublicCinemaCache publicCinemaCache) {
+    public FacilityService(
+            CinemaFacilityRepository cinemaFacilityRepository, PublicCinemaCache publicCinemaCache, Clock clock) {
         this.cinemaFacilityRepository = cinemaFacilityRepository;
         this.publicCinemaCache = publicCinemaCache;
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true)
     @Override
-    public List<FacilityResponse> listFacilities() {
-        return cinemaFacilityRepository.findAllByOrderByNameAsc().stream()
+    public List<FacilityResponse> listFacilities(boolean deleted) {
+        return cinemaFacilityRepository.findAllByDeletedOrderByNameAsc(deleted).stream()
                 .map(CinemaMapper::toFacilityResponse)
                 .toList();
     }
@@ -37,7 +42,7 @@ public class FacilityService implements IFacilityService {
     @Override
     public FacilityResponse createFacility(FacilityRequest facilityRequest) {
         String name = facilityRequest.name().trim();
-        if (cinemaFacilityRepository.existsByNameIgnoreCase(name)) {
+        if (cinemaFacilityRepository.existsByNameIgnoreCaseAndDeletedFalse(name)) {
             throw nameAlreadyUsed();
         }
         CinemaFacility cinemaFacility = new CinemaFacility();
@@ -48,9 +53,9 @@ public class FacilityService implements IFacilityService {
     @Transactional
     @Override
     public FacilityResponse updateFacility(Long facilityId, FacilityRequest facilityRequest) {
-        CinemaFacility cinemaFacility = loadFacility(facilityId);
+        CinemaFacility cinemaFacility = loadFacility(facilityId, false);
         String name = facilityRequest.name().trim();
-        if (cinemaFacilityRepository.existsByNameIgnoreCaseAndIdNot(name, facilityId)) {
+        if (cinemaFacilityRepository.existsByNameIgnoreCaseAndIdNotAndDeletedFalse(name, facilityId)) {
             throw nameAlreadyUsed();
         }
         applyRequest(cinemaFacility, facilityRequest);
@@ -60,10 +65,21 @@ public class FacilityService implements IFacilityService {
     @Transactional
     @Override
     public void deleteFacility(Long facilityId) {
-        CinemaFacility cinemaFacility = loadFacility(facilityId);
-        cinemaFacilityRepository.delete(cinemaFacility);
-        cinemaFacilityRepository.flush();
+        CinemaFacility cinemaFacility = loadFacility(facilityId, false);
+        cinemaFacility.markDeleted(Instant.now(clock));
+        cinemaFacilityRepository.saveAndFlush(cinemaFacility);
         publicCinemaCache.evictAfterCommit();
+    }
+
+    @Transactional
+    @Override
+    public FacilityResponse restoreFacility(Long facilityId) {
+        CinemaFacility cinemaFacility = loadFacility(facilityId, true);
+        if (cinemaFacilityRepository.existsByNameIgnoreCaseAndDeletedFalse(cinemaFacility.getName())) {
+            throw nameAlreadyUsed();
+        }
+        cinemaFacility.restore();
+        return saveAndEvict(cinemaFacility);
     }
 
     private FacilityResponse saveAndEvict(CinemaFacility cinemaFacility) {
@@ -82,8 +98,8 @@ public class FacilityService implements IFacilityService {
         cinemaFacility.setDescription(blankToNull(facilityRequest.description()));
     }
 
-    private CinemaFacility loadFacility(Long facilityId) {
-        return cinemaFacilityRepository.findById(facilityId)
+    private CinemaFacility loadFacility(Long facilityId, boolean deleted) {
+        return cinemaFacilityRepository.findByIdAndDeleted(facilityId, deleted)
                 .orElseThrow(() -> new AppException(
                         "Không tìm thấy tiện ích", HttpStatus.NOT_FOUND, "FACILITY_NOT_FOUND"));
     }

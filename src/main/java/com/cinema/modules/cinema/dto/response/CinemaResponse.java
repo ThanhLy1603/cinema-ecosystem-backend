@@ -16,5 +16,6 @@ public record CinemaResponse(
         BigDecimal longitude,
         CinemaStatus status,
         List<FacilityResponse> facilities,
-        int hallCount) {
+        int hallCount,
+        boolean deleted) {
 }

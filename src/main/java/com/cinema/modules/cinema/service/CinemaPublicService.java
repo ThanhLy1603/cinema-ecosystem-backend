@@ -89,10 +89,10 @@ public class CinemaPublicService implements ICinemaPublicService {
     @Transactional(readOnly = true)
     @Override
     public SeatLayoutResponse findPublicSeatLayout(Long hallId) {
-        Hall hall = hallRepository.findById(hallId)
+        Hall hall = hallRepository.findByIdAndDeleted(hallId, false)
                 .filter(foundHall -> foundHall.getStatus() == HallStatus.ACTIVE)
                 .orElseThrow(CinemaAccessGuard::hallNotFound);
-        boolean cinemaIsActive = cinemaRepository.findById(hall.getCinemaId())
+        boolean cinemaIsActive = cinemaRepository.findByIdAndDeleted(hall.getCinemaId(), false)
                 .map(cinema -> cinema.getStatus() == CinemaStatus.ACTIVE)
                 .orElse(false);
         if (!cinemaIsActive) {
@@ -104,14 +104,14 @@ public class CinemaPublicService implements ICinemaPublicService {
 
     private List<CinemaResponse> loadPublicCinemas(String city) {
         List<Cinema> cinemas = cinemaRepository.findAll(
-                CinemaSpecifications.search(null, city, CinemaStatus.ACTIVE, null), Sort.by("city", "name", "id"));
+                CinemaSpecifications.search(null, city, CinemaStatus.ACTIVE, null, false), Sort.by("city", "name", "id"));
         if (cinemas.isEmpty()) {
             return List.of();
         }
         List<Long> cinemaIds = cinemas.stream().map(Cinema::getId).toList();
         Map<Long, Cinema> cinemasWithFacilities = cinemaRepository.findWithFacilitiesByIdIn(cinemaIds).stream()
                 .collect(Collectors.toMap(Cinema::getId, Function.identity()));
-        Map<Long, Long> activeHallCounts = hallRepository.findByCinemaIdInOrderByNameAsc(cinemaIds).stream()
+        Map<Long, Long> activeHallCounts = hallRepository.findByCinemaIdInAndDeletedFalseOrderByNameAsc(cinemaIds).stream()
                 .filter(hall -> hall.getStatus() == HallStatus.ACTIVE)
                 .collect(Collectors.groupingBy(Hall::getCinemaId, Collectors.counting()));
         return cinemaIds.stream()
@@ -121,9 +121,9 @@ public class CinemaPublicService implements ICinemaPublicService {
     }
 
     private CinemaDetailResponse loadPublicCinemaDetail(String slug) {
-        Cinema cinema = cinemaRepository.findWithFacilitiesBySlugAndStatus(slug, CinemaStatus.ACTIVE)
+        Cinema cinema = cinemaRepository.findWithFacilitiesBySlugAndStatusAndDeleted(slug, CinemaStatus.ACTIVE, false)
                 .orElseThrow(() -> new AppException("Không tìm thấy cụm rạp", HttpStatus.NOT_FOUND, "CINEMA_NOT_FOUND"));
-        List<Hall> activeHalls = hallRepository.findByCinemaIdAndStatusOrderByNameAsc(cinema.getId(), HallStatus.ACTIVE);
+        List<Hall> activeHalls = hallRepository.findByCinemaIdAndStatusAndDeletedFalseOrderByNameAsc(cinema.getId(), HallStatus.ACTIVE);
         return CinemaMapper.toCinemaDetailResponse(cinema, activeHalls);
     }
 }

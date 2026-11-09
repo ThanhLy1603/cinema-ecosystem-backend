@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -34,8 +35,11 @@ public class AdminHallController {
 
     @GetMapping("/cinemas/{cinemaId}/halls")
     public ResponseEntity<ApiResponse<List<HallResponse>>> listHalls(
-            @AuthenticationPrincipal AuthenticatedUser authenticatedUser, @PathVariable Long cinemaId) {
-        return ResponseEntity.ok(ApiResponse.success(hallService.listHalls(authenticatedUser.userId(), cinemaId)));
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+            @PathVariable Long cinemaId,
+            @RequestParam(defaultValue = "false") boolean deleted) {
+        return ResponseEntity.ok(
+                ApiResponse.success(hallService.listHalls(authenticatedUser.userId(), cinemaId, deleted)));
     }
 
     @PostMapping("/cinemas/{cinemaId}/halls")
@@ -61,5 +65,12 @@ public class AdminHallController {
             @AuthenticationPrincipal AuthenticatedUser authenticatedUser, @PathVariable Long hallId) {
         hallService.deleteHall(authenticatedUser.userId(), hallId);
         return ResponseEntity.ok(ApiResponse.success("Xóa phòng chiếu thành công", null));
+    }
+
+    @PostMapping("/halls/{hallId}/restore")
+    public ResponseEntity<ApiResponse<HallResponse>> restoreHall(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser, @PathVariable Long hallId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Khôi phục phòng chiếu thành công", hallService.restoreHall(authenticatedUser.userId(), hallId)));
     }
 }

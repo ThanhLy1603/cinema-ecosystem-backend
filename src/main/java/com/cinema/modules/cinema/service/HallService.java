@@ -12,6 +12,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 
 @Service
@@ -21,12 +23,15 @@ public class HallService implements IHallService {
     private final CinemaAccessGuard cinemaAccessGuard;
     private final HallUsageChecker hallUsageChecker;
     private final PublicCinemaCache publicCinemaCache;
+    private final Clock clock;
 
     public HallService(
             HallRepository hallRepository,
             CinemaAccessGuard cinemaAccessGuard,
             HallUsageChecker hallUsageChecker,
-            PublicCinemaCache publicCinemaCache) {
+            PublicCinemaCache publicCinemaCache,
+            Clock clock) {
+        this.clock = clock;
         this.hallRepository = hallRepository;
         this.cinemaAccessGuard = cinemaAccessGuard;
         this.hallUsageChecker = hallUsageChecker;
@@ -35,9 +40,9 @@ public class HallService implements IHallService {
 
     @Transactional(readOnly = true)
     @Override
-    public List<HallResponse> listHalls(Long actorUserId, Long cinemaId) {
+    public List<HallResponse> listHalls(Long actorUserId, Long cinemaId, boolean deleted) {
         cinemaAccessGuard.requireAccessibleCinema(actorUserId, cinemaId);
-        return hallRepository.findByCinemaIdOrderByNameAsc(cinemaId).stream()
+        return hallRepository.findByCinemaIdAndDeletedOrderByNameAsc(cinemaId, deleted).stream()
                 .map(CinemaMapper::toHallResponse)
                 .toList();
     }
@@ -47,7 +52,7 @@ public class HallService implements IHallService {
     public HallResponse createHall(Long actorUserId, Long cinemaId, HallRequest hallRequest) {
         cinemaAccessGuard.requireAccessibleCinema(actorUserId, cinemaId);
         String name = hallRequest.name().trim();
-        if (hallRepository.existsByCinemaIdAndNameIgnoreCase(cinemaId, name)) {
+        if (hallRepository.existsByCinemaIdAndNameIgnoreCaseAndDeletedFalse(cinemaId, name)) {
             throw nameAlreadyUsed();
         }
         Hall hall = new Hall();
@@ -61,7 +66,7 @@ public class HallService implements IHallService {
     public HallResponse updateHall(Long actorUserId, Long hallId, HallRequest hallRequest) {
         Hall hall = cinemaAccessGuard.requireAccessibleHall(actorUserId, hallId);
         String name = hallRequest.name().trim();
-        if (hallRepository.existsByCinemaIdAndNameIgnoreCaseAndIdNot(hall.getCinemaId(), name, hallId)) {
+        if (hallRepository.existsByCinemaIdAndNameIgnoreCaseAndIdNotAndDeletedFalse(hall.getCinemaId(), name, hallId)) {
             throw nameAlreadyUsed();
         }
         applyRequest(hall, hallRequest);
@@ -72,15 +77,27 @@ public class HallService implements IHallService {
     @Override
     public void deleteHall(Long actorUserId, Long hallId) {
         Hall hall = cinemaAccessGuard.requireAccessibleHall(actorUserId, hallId);
-        if (hallUsageChecker.hasShowtimes(hallId)) {
+        Instant now = Instant.now(clock);
+        if (hallUsageChecker.countUpcomingShowtimesByHall(hallId, now) > 0) {
             throw new AppException(
-                    "Phòng chiếu đã có suất chiếu, hãy chuyển sang trạng thái bảo trì thay vì xóa",
+                    "Phòng chiếu còn suất chiếu chưa diễn ra, hãy hủy suất chiếu hoặc chuyển sang bảo trì",
                     HttpStatus.CONFLICT,
-                    "HALL_HAS_SHOWTIMES");
+                    "HALL_HAS_UPCOMING_SHOWTIMES");
         }
-        hallRepository.delete(hall);
-        hallRepository.flush();
+        hall.markDeleted(now);
+        hallRepository.saveAndFlush(hall);
         publicCinemaCache.evictAfterCommit();
+    }
+
+    @Transactional
+    @Override
+    public HallResponse restoreHall(Long actorUserId, Long hallId) {
+        Hall hall = cinemaAccessGuard.requireDeletedHallOfActiveCinema(actorUserId, hallId);
+        if (hallRepository.existsByCinemaIdAndNameIgnoreCaseAndDeletedFalse(hall.getCinemaId(), hall.getName())) {
+            throw nameAlreadyUsed();
+        }
+        hall.restore();
+        return saveAndEvict(hall);
     }
 
     private void applyRequest(Hall hall, HallRequest hallRequest) {

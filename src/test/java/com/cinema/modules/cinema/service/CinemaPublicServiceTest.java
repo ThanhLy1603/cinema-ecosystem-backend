@@ -82,7 +82,7 @@ class CinemaPublicServiceTest {
         when(cinemaRepository.findDistinctCitiesByStatus(CinemaStatus.ACTIVE)).thenReturn(List.of("Hà Nội"));
         when(cinemaRepository.findAll(any(Specification.class), any(Sort.class))).thenReturn(List.of(cinema));
         when(cinemaRepository.findWithFacilitiesByIdIn(List.of(1L))).thenReturn(List.of(cinema));
-        when(hallRepository.findByCinemaIdInOrderByNameAsc(List.of(1L)))
+        when(hallRepository.findByCinemaIdInAndDeletedFalseOrderByNameAsc(List.of(1L)))
                 .thenReturn(List.of(activeHall, maintenanceHall));
 
         List<CinemaResponse> cinemaResponses = cinemaPublicService.findPublicCinemas(" Hà Nội ");
@@ -93,7 +93,7 @@ class CinemaPublicServiceTest {
 
     @Test
     void seatLayoutOfAHallUnderMaintenanceIsNotPublic() {
-        when(hallRepository.findById(10L)).thenReturn(Optional.of(hall(10L, HallStatus.MAINTENANCE)));
+        when(hallRepository.findByIdAndDeleted(10L, false)).thenReturn(Optional.of(hall(10L, HallStatus.MAINTENANCE)));
 
         AppException appException =
                 assertThrows(AppException.class, () -> cinemaPublicService.findPublicSeatLayout(10L));
@@ -106,8 +106,8 @@ class CinemaPublicServiceTest {
         Cinema inactiveCinema = new Cinema();
         inactiveCinema.setId(1L);
         inactiveCinema.setStatus(CinemaStatus.INACTIVE);
-        when(hallRepository.findById(10L)).thenReturn(Optional.of(hall(10L, HallStatus.ACTIVE)));
-        when(cinemaRepository.findById(1L)).thenReturn(Optional.of(inactiveCinema));
+        when(hallRepository.findByIdAndDeleted(10L, false)).thenReturn(Optional.of(hall(10L, HallStatus.ACTIVE)));
+        when(cinemaRepository.findByIdAndDeleted(1L, false)).thenReturn(Optional.of(inactiveCinema));
 
         AppException appException =
                 assertThrows(AppException.class, () -> cinemaPublicService.findPublicSeatLayout(10L));
@@ -120,8 +120,8 @@ class CinemaPublicServiceTest {
         Cinema activeCinema = new Cinema();
         activeCinema.setId(1L);
         activeCinema.setStatus(CinemaStatus.ACTIVE);
-        when(hallRepository.findById(10L)).thenReturn(Optional.of(hall(10L, HallStatus.ACTIVE)));
-        when(cinemaRepository.findById(1L)).thenReturn(Optional.of(activeCinema));
+        when(hallRepository.findByIdAndDeleted(10L, false)).thenReturn(Optional.of(hall(10L, HallStatus.ACTIVE)));
+        when(cinemaRepository.findByIdAndDeleted(1L, false)).thenReturn(Optional.of(activeCinema));
         when(seatRepository.findAllByHallIdOrderBySeatRowAscSeatNumberAsc(10L)).thenReturn(List.of());
 
         SeatLayoutResponse seatLayoutResponse = cinemaPublicService.findPublicSeatLayout(10L);

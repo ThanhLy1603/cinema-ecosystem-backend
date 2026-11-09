@@ -19,15 +19,16 @@ public class HallUsageChecker {
         this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
     }
 
-    public boolean hasShowtimes(Long hallId) {
+    public long countUpcomingShowtimesByHall(Long hallId, Instant now) {
         Long showtimeCount = namedParameterJdbcTemplate.queryForObject(
-                "select count(*) from showtimes showtime where showtime.hall_id = :hallId",
-                new MapSqlParameterSource("hallId", hallId),
+                "select count(*) from showtimes showtime "
+                        + "where showtime.hall_id = :hallId and showtime.end_time > :now",
+                new MapSqlParameterSource("hallId", hallId).addValue("now", Timestamp.from(now)),
                 Long.class);
-        return showtimeCount != null && showtimeCount > 0;
+        return showtimeCount == null ? 0 : showtimeCount;
     }
 
-    public long countUpcomingShowtimes(Long cinemaId, Instant now) {
+    public long countUpcomingShowtimesByCinema(Long cinemaId, Instant now) {
         Long showtimeCount = namedParameterJdbcTemplate.queryForObject(
                 "select count(*) from showtimes showtime join halls hall on hall.id = showtime.hall_id "
                         + "where hall.cinema_id = :cinemaId and showtime.end_time > :now",

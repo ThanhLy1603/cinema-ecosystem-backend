@@ -1,6 +1,7 @@
 package com.cinema.modules.cinema.entity;
 
 import com.cinema.modules.cinema.enums.CinemaStatus;
+import com.cinema.common.entity.SoftDeleteEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -26,7 +27,7 @@ import java.util.Set;
 @NoArgsConstructor
 @Entity
 @Table(name = "cinemas")
-public class Cinema {
+public class Cinema extends SoftDeleteEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -35,7 +36,7 @@ public class Cinema {
     @Column(name = "name", nullable = false, length = 255)
     private String name;
 
-    @Column(name = "slug", nullable = false, unique = true, length = 255)
+    @Column(name = "slug", nullable = false, length = 255)
     private String slug;
 
     @Column(name = "city", nullable = false, length = 100)

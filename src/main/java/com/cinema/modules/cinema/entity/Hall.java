@@ -3,6 +3,7 @@ package com.cinema.modules.cinema.entity;
 import com.cinema.modules.cinema.converter.ScreenTypeConverter;
 import com.cinema.modules.cinema.enums.HallStatus;
 import com.cinema.modules.cinema.enums.ScreenType;
+import com.cinema.common.entity.SoftDeleteEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
@@ -24,7 +25,7 @@ import java.time.Instant;
 @NoArgsConstructor
 @Entity
 @Table(name = "halls")
-public class Hall {
+public class Hall extends SoftDeleteEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

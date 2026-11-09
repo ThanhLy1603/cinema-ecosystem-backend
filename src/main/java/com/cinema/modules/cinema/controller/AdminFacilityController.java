@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -31,8 +32,10 @@ public class AdminFacilityController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<FacilityResponse>>> listFacilities() {
-        return ResponseEntity.ok(ApiResponse.success(facilityService.listFacilities()));
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_MANAGER') and (hasAuthority('ROLE_ADMIN') or !#deleted)")
+    public ResponseEntity<ApiResponse<List<FacilityResponse>>> listFacilities(
+            @RequestParam(defaultValue = "false") boolean deleted) {
+        return ResponseEntity.ok(ApiResponse.success(facilityService.listFacilities(deleted)));
     }
 
     @PostMapping
@@ -56,5 +59,11 @@ public class AdminFacilityController {
     public ResponseEntity<ApiResponse<Void>> deleteFacility(@PathVariable Long facilityId) {
         facilityService.deleteFacility(facilityId);
         return ResponseEntity.ok(ApiResponse.success("Xóa tiện ích thành công", null));
+    }
+
+    @PostMapping("/{facilityId}/restore")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<ApiResponse<FacilityResponse>> restoreFacility(@PathVariable Long facilityId) {
+        return ResponseEntity.ok(ApiResponse.success("Khôi phục tiện ích thành công", facilityService.restoreFacility(facilityId)));
     }
 }

@@ -1,5 +1,6 @@
 package com.cinema.modules.cinema.entity;
 
+import com.cinema.common.entity.SoftDeleteEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -17,7 +18,7 @@ import java.util.Objects;
 @NoArgsConstructor
 @Entity
 @Table(name = "cinema_facilities")
-public class CinemaFacility {
+public class CinemaFacility extends SoftDeleteEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -26,11 +26,13 @@ public final class CinemaMapper {
                 cinemaFacility.getId(),
                 cinemaFacility.getName(),
                 cinemaFacility.getIconUrl(),
-                cinemaFacility.getDescription());
+                cinemaFacility.getDescription(),
+                cinemaFacility.isDeleted());
     }
 
     public static List<FacilityResponse> toFacilityResponses(Cinema cinema) {
         return cinema.getFacilities().stream()
+                .filter(cinemaFacility -> !cinemaFacility.isDeleted())
                 .sorted(Comparator.comparing(CinemaFacility::getName, String.CASE_INSENSITIVE_ORDER))
                 .map(CinemaMapper::toFacilityResponse)
                 .toList();
@@ -43,7 +45,8 @@ public final class CinemaMapper {
                 hall.getName(),
                 hall.getScreenType(),
                 hall.getTotalSeats(),
-                hall.getStatus());
+                hall.getStatus(),
+                hall.isDeleted());
     }
 
     public static CinemaResponse toCinemaResponse(Cinema cinema, int hallCount) {
@@ -58,7 +61,8 @@ public final class CinemaMapper {
                 cinema.getLongitude(),
                 cinema.getStatus(),
                 toFacilityResponses(cinema),
-                hallCount);
+                hallCount,
+                cinema.isDeleted());
     }
 
     public static CinemaDetailResponse toCinemaDetailResponse(Cinema cinema, List<Hall> halls) {
@@ -73,7 +77,8 @@ public final class CinemaMapper {
                 cinema.getLongitude(),
                 cinema.getStatus(),
                 toFacilityResponses(cinema),
-                halls.stream().map(CinemaMapper::toHallResponse).toList());
+                halls.stream().map(CinemaMapper::toHallResponse).toList(),
+                cinema.isDeleted());
     }
 
     public static SeatTypeResponse toSeatTypeResponse(SeatType seatType) {

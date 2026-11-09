@@ -35,15 +35,17 @@ public class AdminCinemaController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_MANAGER') and (hasAuthority('ROLE_ADMIN') or !#deleted)")
     public ResponseEntity<ApiResponse<PageResponse<CinemaResponse>>> searchCinemas(
             @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String city,
             @RequestParam(required = false) CinemaStatus status,
+            @RequestParam(defaultValue = "false") boolean deleted,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(cinemaAdminService.searchCinemas(
-                authenticatedUser.userId(), search, city, status, page, size)));
+                authenticatedUser.userId(), search, city, status, deleted, page, size)));
     }
 
     @GetMapping("/{cinemaId}")
@@ -75,5 +77,11 @@ public class AdminCinemaController {
     public ResponseEntity<ApiResponse<Void>> deleteCinema(@PathVariable Long cinemaId) {
         cinemaAdminService.deleteCinema(cinemaId);
         return ResponseEntity.ok(ApiResponse.success("Xóa cụm rạp thành công", null));
+    }
+
+    @PostMapping("/{cinemaId}/restore")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<ApiResponse<CinemaDetailResponse>> restoreCinema(@PathVariable Long cinemaId) {
+        return ResponseEntity.ok(ApiResponse.success("Khôi phục cụm rạp thành công", cinemaAdminService.restoreCinema(cinemaId)));
     }
 }

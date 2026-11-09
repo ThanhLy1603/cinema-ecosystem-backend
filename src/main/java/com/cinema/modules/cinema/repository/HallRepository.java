@@ -7,17 +7,20 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface HallRepository extends JpaRepository<Hall, Long> {
 
-    List<Hall> findByCinemaIdOrderByNameAsc(Long cinemaId);
+    Optional<Hall> findByIdAndDeleted(Long hallId, boolean deleted);
 
-    List<Hall> findByCinemaIdAndStatusOrderByNameAsc(Long cinemaId, HallStatus status);
+    List<Hall> findByCinemaIdAndDeletedOrderByNameAsc(Long cinemaId, boolean deleted);
 
-    List<Hall> findByCinemaIdInOrderByNameAsc(Collection<Long> cinemaIds);
+    List<Hall> findByCinemaIdAndStatusAndDeletedFalseOrderByNameAsc(Long cinemaId, HallStatus status);
 
-    boolean existsByCinemaIdAndNameIgnoreCase(Long cinemaId, String name);
+    List<Hall> findByCinemaIdInAndDeletedFalseOrderByNameAsc(Collection<Long> cinemaIds);
 
-    boolean existsByCinemaIdAndNameIgnoreCaseAndIdNot(Long cinemaId, String name, Long hallId);
+    boolean existsByCinemaIdAndNameIgnoreCaseAndDeletedFalse(Long cinemaId, String name);
+
+    boolean existsByCinemaIdAndNameIgnoreCaseAndIdNotAndDeletedFalse(Long cinemaId, String name, Long hallId);
 }

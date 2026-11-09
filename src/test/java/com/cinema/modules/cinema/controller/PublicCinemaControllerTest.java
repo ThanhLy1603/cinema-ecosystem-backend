@@ -44,10 +44,10 @@ class PublicCinemaControllerTest {
 
     @Test
     void listFiltersByCityAndExposesFacilitiesAndCoordinates() throws Exception {
-        FacilityResponse facilityResponse = new FacilityResponse(1L, "Bãi đỗ xe ô tô", null, null);
+        FacilityResponse facilityResponse = new FacilityResponse(1L, "Bãi đỗ xe ô tô", null, null, false);
         CinemaResponse cinemaResponse = new CinemaResponse(
                 1L, "Rạp A", "rap-a", "Hà Nội", "1 Phố Huế", "0281234567", new BigDecimal("21.0285000"),
-                new BigDecimal("105.8542000"), CinemaStatus.ACTIVE, List.of(facilityResponse), 3);
+                new BigDecimal("105.8542000"), CinemaStatus.ACTIVE, List.of(facilityResponse), 3, false);
         when(cinemaPublicService.findPublicCinemas("Hà Nội")).thenReturn(List.of(cinemaResponse));
 
         mockMvc.perform(get("/api/v1/cinemas/public").param("city", "Hà Nội"))
@@ -70,10 +70,10 @@ class PublicCinemaControllerTest {
 
     @Test
     void detailIncludesHalls() throws Exception {
-        HallResponse hallResponse = new HallResponse(9L, 1L, "Phòng 01", ScreenType.SCREEN_4DX, 120, HallStatus.ACTIVE);
+        HallResponse hallResponse = new HallResponse(9L, 1L, "Phòng 01", ScreenType.SCREEN_4DX, 120, HallStatus.ACTIVE, false);
         CinemaDetailResponse cinemaDetailResponse = new CinemaDetailResponse(
                 1L, "Rạp A", "rap-a", "Hà Nội", "1 Phố Huế", null, null, null, CinemaStatus.ACTIVE, List.of(),
-                List.of(hallResponse));
+                List.of(hallResponse), false);
         when(cinemaPublicService.findPublicCinemaBySlug("rap-a")).thenReturn(cinemaDetailResponse);
 
         mockMvc.perform(get("/api/v1/cinemas/public/rap-a"))

@@ -20,16 +20,18 @@ public interface CinemaRepository extends JpaRepository<Cinema, Long>, JpaSpecif
     List<Cinema> findWithFacilitiesByIdIn(Collection<Long> cinemaIds);
 
     @EntityGraph(attributePaths = "facilities")
-    Optional<Cinema> findWithFacilitiesById(Long cinemaId);
+    Optional<Cinema> findWithFacilitiesByIdAndDeleted(Long cinemaId, boolean deleted);
 
     @EntityGraph(attributePaths = "facilities")
-    Optional<Cinema> findWithFacilitiesBySlugAndStatus(String slug, CinemaStatus status);
+    Optional<Cinema> findWithFacilitiesBySlugAndStatusAndDeleted(String slug, CinemaStatus status, boolean deleted);
 
-    boolean existsBySlug(String slug);
+    Optional<Cinema> findByIdAndDeleted(Long cinemaId, boolean deleted);
+
+    boolean existsBySlugAndDeletedFalse(String slug);
 
     @Query("""
             select distinct cinema.city from Cinema cinema
-            where cinema.status = :status
+            where cinema.status = :status and cinema.deleted = false
             order by cinema.city
             """)
     List<String> findDistinctCitiesByStatus(@Param("status") CinemaStatus status);

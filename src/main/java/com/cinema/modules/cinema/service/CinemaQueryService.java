@@ -32,7 +32,7 @@ public class CinemaQueryService implements ICinemaQueryService {
         MapSqlParameterSource mapSqlParameterSource =
                 new MapSqlParameterSource("cinemaIds", cinemaIds).addValue("status", ACTIVE_STATUS);
         return new HashSet<>(namedParameterJdbcTemplate.queryForList(
-                "select cinema.id from cinemas cinema where cinema.id in (:cinemaIds) and cinema.status = :status",
+                "select cinema.id from cinemas cinema where cinema.id in (:cinemaIds) and cinema.status = :status and cinema.is_deleted = false",
                 mapSqlParameterSource,
                 Long.class));
     }
@@ -40,7 +40,7 @@ public class CinemaQueryService implements ICinemaQueryService {
     @Override
     public Set<Long> findAllCinemaIds() {
         return new HashSet<>(namedParameterJdbcTemplate.queryForList(
-                "select cinema.id from cinemas cinema", new MapSqlParameterSource(), Long.class));
+                "select cinema.id from cinemas cinema where cinema.is_deleted = false", new MapSqlParameterSource(), Long.class));
     }
 
     @Override
@@ -62,7 +62,7 @@ public class CinemaQueryService implements ICinemaQueryService {
     public List<CinemaOptionResponse> findActiveCinemaOptions() {
         return namedParameterJdbcTemplate.query(
                 "select cinema.id, cinema.name, cinema.city from cinemas cinema "
-                        + "where cinema.status = :status order by cinema.name, cinema.id",
+                        + "where cinema.status = :status and cinema.is_deleted = false order by cinema.name, cinema.id",
                 new MapSqlParameterSource("status", ACTIVE_STATUS),
                 (resultSet, rowNumber) -> new CinemaOptionResponse(
                         resultSet.getLong("id"), resultSet.getString("name"), resultSet.getString("city")));

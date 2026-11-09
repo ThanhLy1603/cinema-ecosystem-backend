@@ -73,7 +73,7 @@ public class CinemaAdminService implements ICinemaAdminService {
     @Transactional(readOnly = true)
     @Override
     public PageResponse<CinemaResponse> searchCinemas(
-            Long actorUserId, String keyword, String city, CinemaStatus status, int page, int size) {
+            Long actorUserId, String keyword, String city, CinemaStatus status, boolean deleted, int page, int size) {
         Set<Long> accessibleCinemaIds = branchAccessService.hasAccessToAllCinemas(actorUserId)
                 ? null
                 : branchAccessService.getAccessibleCinemaIds(actorUserId);
@@ -82,11 +82,11 @@ public class CinemaAdminService implements ICinemaAdminService {
                 size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE),
                 Sort.by("name", "id"));
         Page<Cinema> cinemaPage = cinemaRepository.findAll(
-                CinemaSpecifications.search(keyword, city, status, accessibleCinemaIds), pageable);
+                CinemaSpecifications.search(keyword, city, status, accessibleCinemaIds, deleted), pageable);
         List<Long> cinemaIds = cinemaPage.getContent().stream().map(Cinema::getId).toList();
         Map<Long, Cinema> cinemasWithFacilities = cinemaRepository.findWithFacilitiesByIdIn(cinemaIds).stream()
                 .collect(Collectors.toMap(Cinema::getId, Function.identity()));
-        Map<Long, Long> hallCounts = hallRepository.findByCinemaIdInOrderByNameAsc(cinemaIds).stream()
+        Map<Long, Long> hallCounts = hallRepository.findByCinemaIdInAndDeletedFalseOrderByNameAsc(cinemaIds).stream()
                 .collect(Collectors.groupingBy(Hall::getCinemaId, Collectors.counting()));
         List<CinemaResponse> cinemaResponses = cinemaIds.stream()
                 .map(cinemaId -> CinemaMapper.toCinemaResponse(
@@ -133,36 +133,45 @@ public class CinemaAdminService implements ICinemaAdminService {
     @Transactional
     @Override
     public void deleteCinema(Long cinemaId) {
-        Cinema cinema = cinemaRepository.findById(cinemaId)
-                .filter(foundCinema -> foundCinema.getStatus() != CinemaStatus.DELETED)
+        Cinema cinema = cinemaRepository.findByIdAndDeleted(cinemaId, false)
                 .orElseThrow(CinemaAccessGuard::cinemaNotFound);
         Instant now = Instant.now(clock);
-        if (hallUsageChecker.countUpcomingShowtimes(cinemaId, now) > 0) {
+        if (hallUsageChecker.countUpcomingShowtimesByCinema(cinemaId, now) > 0) {
             throw new AppException(
                     "Cụm rạp còn suất chiếu chưa diễn ra, hãy hủy suất chiếu hoặc chuyển rạp sang tạm ngưng",
                     HttpStatus.CONFLICT,
                     "CINEMA_HAS_UPCOMING_SHOWTIMES");
         }
-        cinema.setStatus(CinemaStatus.DELETED);
+        cinema.markDeleted(now);
         cinemaRepository.save(cinema);
         publicCinemaCache.evictAfterCommit();
     }
 
+    @Transactional
+    @Override
+    public CinemaDetailResponse restoreCinema(Long cinemaId) {
+        Cinema cinema = cinemaRepository.findWithFacilitiesByIdAndDeleted(cinemaId, true)
+                .orElseThrow(() -> new AppException(
+                        "Không tìm thấy cụm rạp đã xóa", HttpStatus.NOT_FOUND, "CINEMA_NOT_FOUND"));
+        if (cinemaRepository.existsBySlugAndDeletedFalse(cinema.getSlug())) {
+            cinema.setSlug(generateUniqueSlug(cinema.getName()));
+        }
+        cinema.restore();
+        Cinema savedCinema = saveCinema(cinema);
+        publicCinemaCache.evictAfterCommit();
+        return toDetailResponse(savedCinema);
+    }
+
     private Cinema loadCinemaWithFacilities(Long cinemaId) {
-        return cinemaRepository.findWithFacilitiesById(cinemaId)
-                .filter(foundCinema -> foundCinema.getStatus() != CinemaStatus.DELETED)
+        return cinemaRepository.findWithFacilitiesByIdAndDeleted(cinemaId, false)
                 .orElseThrow(CinemaAccessGuard::cinemaNotFound);
     }
 
     private CinemaDetailResponse toDetailResponse(Cinema cinema) {
-        return CinemaMapper.toCinemaDetailResponse(cinema, hallRepository.findByCinemaIdOrderByNameAsc(cinema.getId()));
+        return CinemaMapper.toCinemaDetailResponse(cinema, hallRepository.findByCinemaIdAndDeletedOrderByNameAsc(cinema.getId(), false));
     }
 
     private void validateRequestShape(CinemaRequest cinemaRequest) {
-        if (cinemaRequest.status() == CinemaStatus.DELETED) {
-            throw new AppException(
-                    "Không thể đặt trạng thái đã xóa, hãy dùng thao tác xóa", HttpStatus.BAD_REQUEST, "INVALID_STATUS");
-        }
         if ((cinemaRequest.latitude() == null) != (cinemaRequest.longitude() == null)) {
             throw new AppException(
                     "Vĩ độ và kinh độ phải được nhập cùng nhau", HttpStatus.BAD_REQUEST, "INVALID_COORDINATES");
@@ -187,7 +196,7 @@ public class CinemaAdminService implements ICinemaAdminService {
             return new HashSet<>();
         }
         Set<Long> distinctFacilityIds = new HashSet<>(facilityIds);
-        List<CinemaFacility> cinemaFacilities = cinemaFacilityRepository.findAllById(distinctFacilityIds);
+        List<CinemaFacility> cinemaFacilities = cinemaFacilityRepository.findAllByIdInAndDeletedFalse(distinctFacilityIds);
         if (cinemaFacilities.size() != distinctFacilityIds.size()) {
             throw new AppException("Có tiện ích không tồn tại", HttpStatus.BAD_REQUEST, "INVALID_FACILITY");
         }
@@ -197,7 +206,7 @@ public class CinemaAdminService implements ICinemaAdminService {
     private String generateUniqueSlug(String name) {
         String baseSlug = SlugGenerator.toSlug(name);
         String slug = baseSlug;
-        for (int attempt = 2; cinemaRepository.existsBySlug(slug); attempt++) {
+        for (int attempt = 2; cinemaRepository.existsBySlugAndDeletedFalse(slug); attempt++) {
             if (attempt > MAX_SLUG_ATTEMPTS) {
                 throw new AppException("Không tạo được đường dẫn cho cụm rạp", HttpStatus.CONFLICT, "SLUG_EXHAUSTED");
             }
