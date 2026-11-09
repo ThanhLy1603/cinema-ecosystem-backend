@@ -1,0 +1,9 @@
+spring:
+  datasource:
+    password: <mật khẩu PostgreSQL>
+
+app:
+  jwt:
+    secret: <chuỗi ngẫu nhiên tối thiểu 32 byte, tạo bằng: openssl rand -hex 32>
+  cookie:
+    secure: false

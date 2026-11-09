@@ -10,9 +10,9 @@ import com.cinema.modules.auth.dto.response.RefreshTokenResponse;
 import com.cinema.modules.auth.dto.response.UserResponse;
 import com.cinema.modules.auth.model.AuthSession;
 import com.cinema.modules.auth.model.ClientInfo;
-import com.cinema.modules.auth.security.AccessTokenCookieFactory;
 import com.cinema.modules.auth.security.AuthenticatedUser;
 import com.cinema.modules.auth.security.RefreshTokenCookieFactory;
+import com.cinema.modules.auth.security.SessionCookieWriter;
 import com.cinema.modules.auth.service.AuthService;
 import com.cinema.modules.auth.service.GoogleAuthService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -36,18 +36,15 @@ public class AuthController {
 
     private final AuthService authService;
     private final GoogleAuthService googleAuthService;
-    private final RefreshTokenCookieFactory refreshTokenCookieFactory;
-    private final AccessTokenCookieFactory accessTokenCookieFactory;
+    private final SessionCookieWriter sessionCookieWriter;
 
     public AuthController(
             AuthService authService,
             GoogleAuthService googleAuthService,
-            RefreshTokenCookieFactory refreshTokenCookieFactory,
-            AccessTokenCookieFactory accessTokenCookieFactory) {
+            SessionCookieWriter sessionCookieWriter) {
         this.authService = authService;
         this.googleAuthService = googleAuthService;
-        this.refreshTokenCookieFactory = refreshTokenCookieFactory;
-        this.accessTokenCookieFactory = accessTokenCookieFactory;
+        this.sessionCookieWriter = sessionCookieWriter;
     }
 
     @PostMapping("/register")
@@ -62,7 +59,7 @@ public class AuthController {
             @Valid @RequestBody LoginRequest loginRequest,
             HttpServletRequest httpServletRequest) {
         AuthSession authSession = authService.login(loginRequest, clientInfoOf(httpServletRequest));
-        return sessionCookiesOf(authSession)
+        return sessionCookieWriter.okWithSessionCookies(authSession)
                 .body(ApiResponse.success("Đăng nhập thành công", authSession.toLoginResponse()));
     }
 
@@ -71,7 +68,7 @@ public class AuthController {
             @Valid @RequestBody GoogleLoginRequest googleLoginRequest,
             HttpServletRequest httpServletRequest) {
         AuthSession authSession = googleAuthService.login(googleLoginRequest, clientInfoOf(httpServletRequest));
-        return sessionCookiesOf(authSession)
+        return sessionCookieWriter.okWithSessionCookies(authSession)
                 .body(ApiResponse.success("Đăng nhập thành công", authSession.toLoginResponse()));
     }
 
@@ -82,11 +79,12 @@ public class AuthController {
             HttpServletResponse httpServletResponse) {
         try {
             AuthSession authSession = authService.refresh(rawRefreshToken, clientInfoOf(httpServletRequest));
-            return sessionCookiesOf(authSession)
+            return sessionCookieWriter.okWithSessionCookies(authSession)
                     .body(ApiResponse.success(authSession.toRefreshTokenResponse()));
         } catch (AppException appException) {
-            httpServletResponse.addHeader(HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.clear().toString());
-            httpServletResponse.addHeader(HttpHeaders.SET_COOKIE, accessTokenCookieFactory.clear().toString());
+            if (!AuthService.REFRESH_IN_PROGRESS_ERROR_CODE.equals(appException.getErrorCode())) {
+                sessionCookieWriter.addClearedCookies(httpServletResponse);
+            }
             throw appException;
         }
     }
@@ -105,20 +103,7 @@ public class AuthController {
     }
 
     private ResponseEntity<ApiResponse<Void>> clearedCookieResponse(String message) {
-        return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.clear().toString())
-                .header(HttpHeaders.SET_COOKIE, accessTokenCookieFactory.clear().toString())
-                .body(ApiResponse.success(message, null));
-    }
-
-    private ResponseEntity.BodyBuilder sessionCookiesOf(AuthSession authSession) {
-        String refreshCookie =
-                refreshTokenCookieFactory.create(authSession.refreshToken(), authSession.refreshTokenTtl()).toString();
-        String accessCookie =
-                accessTokenCookieFactory.create(authSession.accessToken(), authSession.accessTokenTtl()).toString();
-        return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, refreshCookie)
-                .header(HttpHeaders.SET_COOKIE, accessCookie);
+        return sessionCookieWriter.okWithClearedCookies().body(ApiResponse.success(message, null));
     }
 
     private ClientInfo clientInfoOf(HttpServletRequest httpServletRequest) {

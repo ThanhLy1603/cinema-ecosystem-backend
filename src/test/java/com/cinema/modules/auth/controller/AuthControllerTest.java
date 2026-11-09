@@ -12,6 +12,7 @@ import com.cinema.modules.auth.model.ClientInfo;
 import com.cinema.modules.auth.security.AccessTokenCookieFactory;
 import com.cinema.modules.auth.security.AuthenticatedUser;
 import com.cinema.modules.auth.security.RefreshTokenCookieFactory;
+import com.cinema.modules.auth.security.SessionCookieWriter;
 import com.cinema.modules.auth.service.AuthService;
 import com.cinema.modules.auth.service.GoogleAuthService;
 import jakarta.servlet.http.Cookie;
@@ -67,8 +68,9 @@ class AuthControllerTest {
     @BeforeEach
     void setUp() {
         AuthController authController = new AuthController(
-                authService, googleAuthService, new RefreshTokenCookieFactory(new CookieProperties(true)),
-                new AccessTokenCookieFactory(new CookieProperties(true)));
+                authService, googleAuthService, new SessionCookieWriter(
+                        new RefreshTokenCookieFactory(new CookieProperties(true)),
+                        new AccessTokenCookieFactory(new CookieProperties(true))));
         mockMvc = MockMvcBuilders.standaloneSetup(authController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
@@ -260,6 +262,18 @@ class AuthControllerTest {
         assertEquals(true, setCookie.contains("refresh_token=;"), setCookie);
         assertEquals(true, setCookie.contains("access_token=;"), setCookie);
         assertEquals(2, setCookie.split("Max-Age=0", -1).length - 1, setCookie);
+    }
+
+    @Test
+    void refreshLostRaceKeepsTheCookiesSetByTheWinningRequest() throws Exception {
+        when(authService.refresh(eq("raw-old"), any(ClientInfo.class)))
+                .thenThrow(new AppException("vừa gia hạn", HttpStatus.UNAUTHORIZED,
+                        AuthService.REFRESH_IN_PROGRESS_ERROR_CODE));
+
+        mockMvc.perform(post("/api/v1/auth/refresh-token").cookie(new Cookie("refresh_token", "raw-old")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("REFRESH_IN_PROGRESS"))
+                .andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE));
     }
 
     @Test

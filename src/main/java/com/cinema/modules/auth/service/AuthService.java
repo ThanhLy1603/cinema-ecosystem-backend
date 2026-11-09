@@ -36,6 +36,7 @@ public class AuthService {
     static final int MAX_FAILED_LOGIN_ATTEMPTS = 5;
     static final Duration LOCK_DURATION = Duration.ofMinutes(15);
     static final Duration REUSE_GRACE_PERIOD = Duration.ofSeconds(10);
+    public static final String REFRESH_IN_PROGRESS_ERROR_CODE = "REFRESH_IN_PROGRESS";
     private static final int MAX_BCRYPT_PASSWORD_BYTES = 72;
     private static final int DEVICE_INFO_MAX_LENGTH = 255;
     private static final int IP_ADDRESS_MAX_LENGTH = 45;
@@ -152,7 +153,8 @@ public class AuthService {
 
         if (currentRefreshToken.isRevoked()) {
             if (isWithinReuseGracePeriod(currentRefreshToken, now)) {
-                throw invalidRefreshToken();
+                throw new AppException("Phiên đăng nhập vừa được gia hạn bởi một yêu cầu khác",
+                        HttpStatus.UNAUTHORIZED, REFRESH_IN_PROGRESS_ERROR_CODE);
             }
             refreshTokenRepository.revokeFamily(currentRefreshToken.getFamilyId(), now);
             throw new AppException("Phiên đăng nhập không còn hợp lệ, vui lòng đăng nhập lại",
@@ -228,7 +230,7 @@ public class AuthService {
                 && now.isBefore(refreshToken.getRevokedAt().plus(REUSE_GRACE_PERIOD));
     }
 
-    private void ensurePasswordFitsBcrypt(String password) {
+    static void ensurePasswordFitsBcrypt(String password) {
         if (password.getBytes(StandardCharsets.UTF_8).length > MAX_BCRYPT_PASSWORD_BYTES) {
             throw new AppException("Mật khẩu quá dài (tối đa 72 byte)", HttpStatus.BAD_REQUEST, "PASSWORD_TOO_LONG");
         }

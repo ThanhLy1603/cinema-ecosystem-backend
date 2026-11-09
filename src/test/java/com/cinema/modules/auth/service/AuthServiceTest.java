@@ -374,7 +374,7 @@ class AuthServiceTest {
         clock.advance(AuthService.REUSE_GRACE_PERIOD.minusSeconds(1));
 
         assertAppException(() -> authService.refresh("raw-rotated", null),
-                HttpStatus.UNAUTHORIZED, "INVALID_REFRESH_TOKEN");
+                HttpStatus.UNAUTHORIZED, AuthService.REFRESH_IN_PROGRESS_ERROR_CODE);
 
         verify(refreshTokenRepository, never()).revokeFamily(any(UUID.class), any(Instant.class));
     }

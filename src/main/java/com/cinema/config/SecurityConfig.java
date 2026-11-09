@@ -36,10 +36,13 @@ public class SecurityConfig {
             "/api/v1/auth/verify-email"
     };
 
-    private static final String[] PUBLIC_ENDPOINTS = {
+    private static final String[] PUBLIC_READ_ENDPOINTS = {
             "/api/v1/movies/**",
             "/api/v1/cinemas/**",
-            "/api/v1/showtimes/**",
+            "/api/v1/showtimes/**"
+    };
+
+    private static final String[] PUBLIC_ENDPOINTS = {
             "/ws/**",
             "/actuator/**"
     };
@@ -72,6 +75,7 @@ public class SecurityConfig {
                         .accessDeniedHandler(restSecurityErrorHandler))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, PUBLIC_AUTH_ENDPOINTS).permitAll()
+                        .requestMatchers(HttpMethod.GET, PUBLIC_READ_ENDPOINTS).permitAll()
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                         .requestMatchers("/api/v1/admin/**").hasAnyAuthority(Role.ADMIN, Role.MANAGER)
                         .requestMatchers("/api/v1/staff/**").hasAnyAuthority(Role.STAFF, Role.MANAGER, Role.ADMIN)

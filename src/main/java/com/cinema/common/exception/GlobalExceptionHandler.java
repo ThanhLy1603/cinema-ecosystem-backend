@@ -1,6 +1,7 @@
 package com.cinema.common.exception;
 
 import com.cinema.common.response.ApiResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -17,6 +18,7 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -81,7 +83,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleGenericException(Exception exception) {
+        log.error("Lỗi hệ thống không xác định", exception);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("Đã xảy ra lỗi hệ thống: " + exception.getMessage(), "INTERNAL_SERVER_ERROR"));
+                .body(ApiResponse.error("Đã xảy ra lỗi hệ thống, vui lòng thử lại sau", "INTERNAL_SERVER_ERROR"));
     }
 }

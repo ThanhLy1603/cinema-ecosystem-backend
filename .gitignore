@@ -30,3 +30,6 @@ target/
 
 ### Mac ###
 .DS_Store
+
+### Local secrets ###
+/config/application.yml
