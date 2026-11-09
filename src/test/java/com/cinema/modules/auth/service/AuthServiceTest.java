@@ -1,6 +1,6 @@
 package com.cinema.modules.auth.service;
 
-import com.cinema.common.AppException;
+import com.cinema.common.exception.AppException;
 import com.cinema.config.JwtProperties;
 import com.cinema.modules.auth.dto.request.LoginRequest;
 import com.cinema.modules.auth.dto.request.RegisterRequest;
@@ -10,6 +10,8 @@ import com.cinema.modules.auth.entity.Role;
 import com.cinema.modules.auth.entity.User;
 import com.cinema.modules.auth.enums.MembershipTier;
 import com.cinema.modules.auth.enums.UserStatus;
+import com.cinema.modules.auth.model.AuthSession;
+import com.cinema.modules.auth.model.ClientInfo;
 import com.cinema.modules.auth.repository.RefreshTokenRepository;
 import com.cinema.modules.auth.repository.RoleRepository;
 import com.cinema.modules.auth.repository.UserRepository;
@@ -235,16 +237,16 @@ class AuthServiceTest {
     @Test
     void loginWithUnknownEmailAndWrongPasswordGiveTheSameError() {
         when(userRepository.findByEmail("nobody@cinema.vn")).thenReturn(Optional.empty());
-        AppException unknownEmail = assertAppException(
+        AppException unknownEmailAppException = assertAppException(
                 () -> authService.login(loginRequest("nobody@cinema.vn", PASSWORD), null),
                 HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS");
 
         existingUser("an@cinema.vn", PASSWORD);
-        AppException wrongPassword = assertAppException(
+        AppException wrongPasswordAppException = assertAppException(
                 () -> authService.login(loginRequest("an@cinema.vn", "SaiMatKhau1"), null),
                 HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS");
 
-        assertEquals(unknownEmail.getMessage(), wrongPassword.getMessage());
+        assertEquals(unknownEmailAppException.getMessage(), wrongPasswordAppException.getMessage());
         verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
     }
 
@@ -321,7 +323,7 @@ class AuthServiceTest {
 
         assertTrue(currentRefreshToken.isRevoked());
         assertEquals(clock.instant(), currentRefreshToken.getRevokedAt());
-        RefreshToken nextRefreshToken = currentRefreshToken.getReplacedBy();
+        RefreshToken nextRefreshToken = currentRefreshToken.getReplacedByRefreshToken();
         assertNotNull(nextRefreshToken);
         assertEquals(familyId, nextRefreshToken.getFamilyId());
         assertEquals(TokenHasher.sha256Hex(authSession.refreshToken()), nextRefreshToken.getTokenHash());
@@ -354,7 +356,7 @@ class AuthServiceTest {
         UUID familyId = UUID.randomUUID();
         RefreshToken stolenRefreshToken = storedRefreshToken(user, "raw-stolen", familyId);
         stolenRefreshToken.revoke(clock.instant());
-        stolenRefreshToken.setReplacedBy(new RefreshToken());
+        stolenRefreshToken.setReplacedByRefreshToken(new RefreshToken());
         clock.advance(Duration.ofMinutes(1));
 
         assertAppException(() -> authService.refresh("raw-stolen", null),
@@ -368,7 +370,7 @@ class AuthServiceTest {
         User user = existingUser("an@cinema.vn", PASSWORD);
         RefreshToken justRotatedRefreshToken = storedRefreshToken(user, "raw-rotated", UUID.randomUUID());
         justRotatedRefreshToken.revoke(clock.instant());
-        justRotatedRefreshToken.setReplacedBy(new RefreshToken());
+        justRotatedRefreshToken.setReplacedByRefreshToken(new RefreshToken());
         clock.advance(AuthService.REUSE_GRACE_PERIOD.minusSeconds(1));
 
         assertAppException(() -> authService.refresh("raw-rotated", null),

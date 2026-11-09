@@ -1,6 +1,6 @@
 package com.cinema.modules.auth.entity;
 
-import com.cinema.common.BaseEntity;
+import com.cinema.common.entity.BaseEntity;
 import com.cinema.modules.auth.enums.StaffPosition;
 import com.cinema.modules.auth.enums.StaffStatus;
 import jakarta.persistence.Column;

@@ -43,3 +43,5 @@ app:
     refresh-token-expiration-seconds: 604800
   cookie:
     secure: false
+  google:
+    client-id: ${GOOGLE_CLIENT_ID:115438259381-urao23pd5ef6utl2an4rekritsmcf7hl.apps.googleusercontent.com}

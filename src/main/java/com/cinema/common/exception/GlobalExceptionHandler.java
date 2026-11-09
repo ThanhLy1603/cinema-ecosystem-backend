@@ -1,5 +1,6 @@
-package com.cinema.common;
+package com.cinema.common.exception;
 
+import com.cinema.common.response.ApiResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -38,7 +40,7 @@ public class GlobalExceptionHandler {
                 .message("Dữ liệu đầu vào không hợp lệ")
                 .data(errors)
                 .errorCode("VALIDATION_ERROR")
-                .timestamp(java.time.Instant.now())
+                .timestamp(Instant.now())
                 .build();
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(apiResponse);

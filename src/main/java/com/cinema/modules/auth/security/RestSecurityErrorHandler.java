@@ -1,6 +1,6 @@
 package com.cinema.modules.auth.security;
 
-import com.cinema.common.ApiResponse;
+import com.cinema.common.response.ApiResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;

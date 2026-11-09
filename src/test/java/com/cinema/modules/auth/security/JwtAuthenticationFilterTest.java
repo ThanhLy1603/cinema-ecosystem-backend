@@ -3,6 +3,7 @@ package com.cinema.modules.auth.security;
 import com.cinema.config.JwtProperties;
 import com.cinema.modules.auth.entity.Role;
 import com.cinema.modules.auth.entity.User;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,18 +51,32 @@ class JwtAuthenticationFilterTest {
     }
 
     private MockFilterChain run(String authorizationHeader) throws Exception {
-        MockHttpServletRequest httpServletRequest = new MockHttpServletRequest();
+        MockHttpServletRequest mockHttpServletRequest = new MockHttpServletRequest();
         if (authorizationHeader != null) {
-            httpServletRequest.addHeader("Authorization", authorizationHeader);
+            mockHttpServletRequest.addHeader("Authorization", authorizationHeader);
         }
-        MockFilterChain filterChain = new MockFilterChain();
-        jwtAuthenticationFilter.doFilter(httpServletRequest, new MockHttpServletResponse(), filterChain);
-        return filterChain;
+        return runRequest(mockHttpServletRequest);
+    }
+
+    private MockFilterChain runWithCookie(String method, String cookieValue, boolean withCsrfGuardHeader)
+            throws Exception {
+        MockHttpServletRequest mockHttpServletRequest = new MockHttpServletRequest(method, "/api/v1/something");
+        mockHttpServletRequest.setCookies(new Cookie(AccessTokenCookieFactory.COOKIE_NAME, cookieValue));
+        if (withCsrfGuardHeader) {
+            mockHttpServletRequest.addHeader(JwtAuthenticationFilter.CSRF_GUARD_HEADER, "XMLHttpRequest");
+        }
+        return runRequest(mockHttpServletRequest);
+    }
+
+    private MockFilterChain runRequest(MockHttpServletRequest mockHttpServletRequest) throws Exception {
+        MockFilterChain mockFilterChain = new MockFilterChain();
+        jwtAuthenticationFilter.doFilter(mockHttpServletRequest, new MockHttpServletResponse(), mockFilterChain);
+        return mockFilterChain;
     }
 
     @Test
     void validBearerTokenAuthenticatesWithRolesAsAuthorities() throws Exception {
-        MockFilterChain filterChain = run("Bearer " + accessToken);
+        MockFilterChain mockFilterChain = run("Bearer " + accessToken);
 
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         assertNotNull(authentication);
@@ -70,15 +85,15 @@ class JwtAuthenticationFilterTest {
         assertEquals(7L, authenticatedUser.userId());
         assertEquals(List.of(Role.STAFF),
                 authentication.getAuthorities().stream().map(Object::toString).toList());
-        assertNotNull(filterChain.getRequest(), "request phải đi tiếp trong chuỗi filter");
+        assertNotNull(mockFilterChain.getRequest(), "request phải đi tiếp trong chuỗi filter");
     }
 
     @Test
     void invalidTokenLeavesRequestUnauthenticatedButContinuesChain() throws Exception {
-        MockFilterChain filterChain = run("Bearer " + accessToken + "tampered");
+        MockFilterChain mockFilterChain = run("Bearer " + accessToken + "tampered");
 
         assertNull(SecurityContextHolder.getContext().getAuthentication());
-        assertNotNull(filterChain.getRequest());
+        assertNotNull(mockFilterChain.getRequest());
     }
 
     @Test
@@ -90,6 +105,48 @@ class JwtAuthenticationFilterTest {
         assertNull(SecurityContextHolder.getContext().getAuthentication());
 
         assertNotNull(run("Bearer ").getRequest());
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+    }
+
+    @Test
+    void accessTokenCookieAuthenticatesSafeRequestsWithoutCsrfHeader() throws Exception {
+        runWithCookie("GET", accessToken, false);
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        assertNotNull(authentication);
+        assertEquals(7L, ((AuthenticatedUser) authentication.getPrincipal()).userId());
+    }
+
+    @Test
+    void accessTokenCookieOnStateChangingRequestNeedsTheCsrfGuardHeader() throws Exception {
+        MockFilterChain mockFilterChain = runWithCookie("POST", accessToken, false);
+
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+        assertNotNull(mockFilterChain.getRequest());
+    }
+
+    @Test
+    void accessTokenCookieOnStateChangingRequestWithCsrfGuardHeaderAuthenticates() throws Exception {
+        runWithCookie("POST", accessToken, true);
+
+        assertNotNull(SecurityContextHolder.getContext().getAuthentication());
+    }
+
+    @Test
+    void invalidAccessTokenCookieIsIgnored() throws Exception {
+        runWithCookie("GET", accessToken + "tampered", true);
+
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+    }
+
+    @Test
+    void bearerHeaderTakesPrecedenceOverCookie() throws Exception {
+        MockHttpServletRequest mockHttpServletRequest = new MockHttpServletRequest("GET", "/api/v1/something");
+        mockHttpServletRequest.addHeader("Authorization", "Bearer " + accessToken + "tampered");
+        mockHttpServletRequest.setCookies(new Cookie(AccessTokenCookieFactory.COOKIE_NAME, accessToken));
+
+        runRequest(mockHttpServletRequest);
+
         assertNull(SecurityContextHolder.getContext().getAuthentication());
     }
 }

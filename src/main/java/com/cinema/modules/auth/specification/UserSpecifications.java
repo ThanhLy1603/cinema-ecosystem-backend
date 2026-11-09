@@ -1,4 +1,4 @@
-package com.cinema.modules.auth.repository;
+package com.cinema.modules.auth.specification;
 
 import com.cinema.modules.auth.entity.Role;
 import com.cinema.modules.auth.entity.User;

@@ -1,4 +1,4 @@
-package com.cinema.common;
+package com.cinema.common.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;

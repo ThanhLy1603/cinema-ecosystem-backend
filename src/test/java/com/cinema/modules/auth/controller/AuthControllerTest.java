@@ -1,16 +1,19 @@
 package com.cinema.modules.auth.controller;
 
-import com.cinema.common.AppException;
-import com.cinema.common.GlobalExceptionHandler;
+import com.cinema.common.exception.AppException;
+import com.cinema.common.exception.GlobalExceptionHandler;
 import com.cinema.config.CookieProperties;
+import com.cinema.modules.auth.dto.request.GoogleLoginRequest;
 import com.cinema.modules.auth.dto.request.LoginRequest;
 import com.cinema.modules.auth.dto.request.RegisterRequest;
 import com.cinema.modules.auth.dto.response.UserResponse;
+import com.cinema.modules.auth.model.AuthSession;
+import com.cinema.modules.auth.model.ClientInfo;
+import com.cinema.modules.auth.security.AccessTokenCookieFactory;
 import com.cinema.modules.auth.security.AuthenticatedUser;
 import com.cinema.modules.auth.security.RefreshTokenCookieFactory;
 import com.cinema.modules.auth.service.AuthService;
-import com.cinema.modules.auth.service.AuthSession;
-import com.cinema.modules.auth.service.ClientInfo;
+import com.cinema.modules.auth.service.GoogleAuthService;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +29,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.Duration;
@@ -46,6 +50,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ExtendWith(MockitoExtension.class)
 class AuthControllerTest {
 
+    private static final Duration ACCESS_TTL = Duration.ofMinutes(15);
     private static final Duration REFRESH_TTL = Duration.ofDays(7);
     private static final UserResponse USER_RESPONSE = new UserResponse(
             1L, "an@cinema.vn", "Nguyễn An", null, null, List.of("ROLE_CUSTOMER"), 0, "STAR", false);
@@ -54,12 +59,16 @@ class AuthControllerTest {
     @Mock
     private AuthService authService;
 
+    @Mock
+    private GoogleAuthService googleAuthService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         AuthController authController = new AuthController(
-                authService, new RefreshTokenCookieFactory(new CookieProperties(true)));
+                authService, googleAuthService, new RefreshTokenCookieFactory(new CookieProperties(true)),
+                new AccessTokenCookieFactory(new CookieProperties(true)));
         mockMvc = MockMvcBuilders.standaloneSetup(authController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
@@ -71,8 +80,60 @@ class AuthControllerTest {
         SecurityContextHolder.clearContext();
     }
 
+    private String setCookiesOf(MvcResult mvcResult) {
+        return String.join(" | ", mvcResult.getResponse().getHeaders(HttpHeaders.SET_COOKIE));
+    }
+
     private AuthSession authSession(String rawRefreshToken) {
-        return new AuthSession(USER_RESPONSE, "access-jwt", rawRefreshToken, REFRESH_TTL);
+        return new AuthSession(USER_RESPONSE, "access-jwt", ACCESS_TTL, rawRefreshToken, REFRESH_TTL);
+    }
+
+    @Test
+    void googleLoginSetsBothHttpOnlyCookiesAndKeepsTokensOutOfTheBody() throws Exception {
+        when(googleAuthService.login(any(GoogleLoginRequest.class), any(ClientInfo.class)))
+                .thenReturn(authSession("raw-google-refresh"));
+
+        MvcResult mvcResult = mockMvc.perform(post("/api/v1/auth/google")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idToken\":\"google-id-token\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.accessToken").doesNotExist())
+                .andExpect(jsonPath("$.data.user.email").value("an@cinema.vn"))
+                .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
+                .andReturn();
+
+        String setCookie = setCookiesOf(mvcResult);
+
+        assertEquals(true, setCookie.contains("refresh_token=raw-google-refresh"));
+        assertEquals(true, setCookie.contains("HttpOnly"));
+        assertEquals(true, setCookie.contains("SameSite=Strict"));
+        assertEquals(true, setCookie.contains("Path=/api/v1/auth"));
+        assertEquals(true, setCookie.contains("access_token=access-jwt"), setCookie);
+        assertEquals(true, setCookie.contains("Max-Age=900"), setCookie);
+    }
+
+    @Test
+    void googleLoginRejectsBlankIdTokenWith400() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/google")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idToken\":\"\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+
+        verify(googleAuthService, never()).login(any(GoogleLoginRequest.class), any(ClientInfo.class));
+    }
+
+    @Test
+    void googleLoginInvalidTokenReturns401WithoutSettingCookie() throws Exception {
+        when(googleAuthService.login(any(GoogleLoginRequest.class), any(ClientInfo.class)))
+                .thenThrow(new AppException("invalid", HttpStatus.UNAUTHORIZED, "INVALID_GOOGLE_TOKEN"));
+
+        mockMvc.perform(post("/api/v1/auth/google")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idToken\":\"bad\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_GOOGLE_TOKEN"))
+                .andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE));
     }
 
     @Test
@@ -125,18 +186,20 @@ class AuthControllerTest {
     }
 
     @Test
-    void loginPutsRefreshTokenInHttpOnlyCookieAndOnlyAccessTokenInBody() throws Exception {
+    void loginPutsBothTokensInHttpOnlyCookiesAndNoneInTheBody() throws Exception {
         when(authService.login(any(LoginRequest.class), any(ClientInfo.class))).thenReturn(authSession("raw-refresh"));
 
-        String setCookie = mockMvc.perform(post("/api/v1/auth/login")
+        MvcResult mvcResult = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header(HttpHeaders.USER_AGENT, "JUnit-Agent")
                         .content(LOGIN_BODY))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.accessToken").value("access-jwt"))
+                .andExpect(jsonPath("$.data.accessToken").doesNotExist())
                 .andExpect(jsonPath("$.data.user.email").value("an@cinema.vn"))
                 .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
-                .andReturn().getResponse().getHeader(HttpHeaders.SET_COOKIE);
+                .andReturn();
+
+        String setCookie = setCookiesOf(mvcResult);
 
         assertEquals(true, setCookie.contains("refresh_token=raw-refresh"), setCookie);
         assertEquals(true, setCookie.contains("HttpOnly"), setCookie);
@@ -144,6 +207,7 @@ class AuthControllerTest {
         assertEquals(true, setCookie.contains("SameSite=Strict"), setCookie);
         assertEquals(true, setCookie.contains("Path=/api/v1/auth"), setCookie);
         assertEquals(true, setCookie.contains("Max-Age=604800"), setCookie);
+        assertEquals(true, setCookie.contains("access_token=access-jwt; Path=/; Max-Age=900"), setCookie);
 
         ArgumentCaptor<ClientInfo> clientInfoArgumentCaptor = ArgumentCaptor.forClass(ClientInfo.class);
         verify(authService).login(any(LoginRequest.class), clientInfoArgumentCaptor.capture());
@@ -166,14 +230,17 @@ class AuthControllerTest {
     void refreshReadsCookieAndRotatesIt() throws Exception {
         when(authService.refresh(eq("raw-old"), any(ClientInfo.class))).thenReturn(authSession("raw-new"));
 
-        String setCookie = mockMvc.perform(post("/api/v1/auth/refresh-token")
+        MvcResult mvcResult = mockMvc.perform(post("/api/v1/auth/refresh-token")
                         .cookie(new Cookie("refresh_token", "raw-old")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.accessToken").value("access-jwt"))
+                .andExpect(jsonPath("$.data.accessToken").doesNotExist())
                 .andExpect(jsonPath("$.data.user.email").value("an@cinema.vn"))
-                .andReturn().getResponse().getHeader(HttpHeaders.SET_COOKIE);
+                .andReturn();
+
+        String setCookie = setCookiesOf(mvcResult);
 
         assertEquals(true, setCookie.contains("refresh_token=raw-new"), setCookie);
+        assertEquals(true, setCookie.contains("access_token=access-jwt"), setCookie);
         assertEquals(true, setCookie.contains("HttpOnly"), setCookie);
     }
 
@@ -182,14 +249,17 @@ class AuthControllerTest {
         when(authService.refresh(eq("raw-bad"), any(ClientInfo.class)))
                 .thenThrow(new AppException("hết hạn", HttpStatus.UNAUTHORIZED, "INVALID_REFRESH_TOKEN"));
 
-        String setCookie = mockMvc.perform(post("/api/v1/auth/refresh-token")
+        MvcResult mvcResult = mockMvc.perform(post("/api/v1/auth/refresh-token")
                         .cookie(new Cookie("refresh_token", "raw-bad")))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.errorCode").value("INVALID_REFRESH_TOKEN"))
-                .andReturn().getResponse().getHeader(HttpHeaders.SET_COOKIE);
+                .andReturn();
 
-        assertEquals(true, setCookie.contains("refresh_token="), setCookie);
-        assertEquals(true, setCookie.contains("Max-Age=0"), setCookie);
+        String setCookie = setCookiesOf(mvcResult);
+
+        assertEquals(true, setCookie.contains("refresh_token=;"), setCookie);
+        assertEquals(true, setCookie.contains("access_token=;"), setCookie);
+        assertEquals(2, setCookie.split("Max-Age=0", -1).length - 1, setCookie);
     }
 
     @Test
@@ -204,14 +274,18 @@ class AuthControllerTest {
 
     @Test
     void logoutRevokesTheCookieTokenAndClearsTheCookie() throws Exception {
-        String setCookie = mockMvc.perform(post("/api/v1/auth/logout")
+        MvcResult mvcResult = mockMvc.perform(post("/api/v1/auth/logout")
                         .cookie(new Cookie("refresh_token", "raw-current")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andReturn().getResponse().getHeader(HttpHeaders.SET_COOKIE);
+                .andReturn();
+
+        String setCookie = setCookiesOf(mvcResult);
 
         verify(authService).logout("raw-current");
-        assertEquals(true, setCookie.contains("Max-Age=0"), setCookie);
+        assertEquals(true, setCookie.contains("refresh_token=;"), setCookie);
+        assertEquals(true, setCookie.contains("access_token=;"), setCookie);
+        assertEquals(2, setCookie.split("Max-Age=0", -1).length - 1, setCookie);
     }
 
     @Test
@@ -227,11 +301,14 @@ class AuthControllerTest {
         SecurityContextHolder.getContext().setAuthentication(
                 UsernamePasswordAuthenticationToken.authenticated(authenticatedUser, null, List.of()));
 
-        String setCookie = mockMvc.perform(post("/api/v1/auth/logout-all"))
+        MvcResult mvcResult = mockMvc.perform(post("/api/v1/auth/logout-all"))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getHeader(HttpHeaders.SET_COOKIE);
+                .andReturn();
+
+        String setCookie = setCookiesOf(mvcResult);
 
         verify(authService).logoutAll(9L);
-        assertEquals(true, setCookie.contains("Max-Age=0"), setCookie);
+        assertEquals(true, setCookie.contains("refresh_token=;"), setCookie);
+        assertEquals(true, setCookie.contains("access_token=;"), setCookie);
     }
 }

@@ -1,6 +1,6 @@
 package com.cinema.modules.auth.entity;
 
-import com.cinema.common.BaseEntity;
+import com.cinema.common.entity.BaseEntity;
 import com.cinema.modules.auth.enums.Gender;
 import com.cinema.modules.auth.enums.MembershipTier;
 import com.cinema.modules.auth.enums.UserStatus;

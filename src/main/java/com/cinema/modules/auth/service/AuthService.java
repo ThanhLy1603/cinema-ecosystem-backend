@@ -1,6 +1,6 @@
 package com.cinema.modules.auth.service;
 
-import com.cinema.common.AppException;
+import com.cinema.common.exception.AppException;
 import com.cinema.config.JwtProperties;
 import com.cinema.modules.auth.dto.request.LoginRequest;
 import com.cinema.modules.auth.dto.request.RegisterRequest;
@@ -9,6 +9,8 @@ import com.cinema.modules.auth.entity.RefreshToken;
 import com.cinema.modules.auth.entity.Role;
 import com.cinema.modules.auth.entity.User;
 import com.cinema.modules.auth.enums.UserStatus;
+import com.cinema.modules.auth.model.AuthSession;
+import com.cinema.modules.auth.model.ClientInfo;
 import com.cinema.modules.auth.repository.RefreshTokenRepository;
 import com.cinema.modules.auth.repository.RoleRepository;
 import com.cinema.modules.auth.repository.UserRepository;
@@ -130,6 +132,13 @@ public class AuthService {
         return buildSession(user, rawRefreshToken);
     }
 
+    @Transactional
+    public AuthSession openSession(User user, ClientInfo clientInfo) {
+        String rawRefreshToken = TokenHasher.generateRandomToken();
+        saveRefreshToken(user, rawRefreshToken, UUID.randomUUID(), clientInfo, clock.instant());
+        return buildSession(user, rawRefreshToken);
+    }
+
     @Transactional(noRollbackFor = AppException.class)
     public AuthSession refresh(String rawRefreshToken, ClientInfo clientInfo) {
         if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
@@ -165,7 +174,7 @@ public class AuthService {
         RefreshToken nextRefreshToken =
                 saveRefreshToken(user, rawNextRefreshToken, currentRefreshToken.getFamilyId(), clientInfo, now);
         currentRefreshToken.revoke(now);
-        currentRefreshToken.setReplacedBy(nextRefreshToken);
+        currentRefreshToken.setReplacedByRefreshToken(nextRefreshToken);
         return buildSession(user, rawNextRefreshToken);
     }
 
@@ -200,7 +209,9 @@ public class AuthService {
 
     private AuthSession buildSession(User user, String rawRefreshToken) {
         String accessToken = jwtTokenProvider.generateAccessToken(user);
-        return new AuthSession(UserResponse.from(user), accessToken, rawRefreshToken, refreshTokenTtl);
+        return new AuthSession(
+                UserResponse.from(user), accessToken, jwtTokenProvider.getAccessTokenTtl(), rawRefreshToken,
+                refreshTokenTtl);
     }
 
     private boolean passwordMatches(String rawPassword, User user) {
@@ -212,7 +223,7 @@ public class AuthService {
     }
 
     private boolean isWithinReuseGracePeriod(RefreshToken refreshToken, Instant now) {
-        return refreshToken.getReplacedBy() != null
+        return refreshToken.getReplacedByRefreshToken() != null
                 && refreshToken.getRevokedAt() != null
                 && now.isBefore(refreshToken.getRevokedAt().plus(REUSE_GRACE_PERIOD));
     }

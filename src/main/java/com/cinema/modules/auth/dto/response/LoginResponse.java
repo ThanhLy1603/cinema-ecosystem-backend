@@ -1,4 +1,4 @@
 package com.cinema.modules.auth.dto.response;
 
-public record LoginResponse(UserResponse user, String accessToken) {
+public record LoginResponse(UserResponse user) {
 }

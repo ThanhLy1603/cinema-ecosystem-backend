@@ -58,7 +58,7 @@ public class RefreshToken {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "replaced_by_id")
-    private RefreshToken replacedBy;
+    private RefreshToken replacedByRefreshToken;
 
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)

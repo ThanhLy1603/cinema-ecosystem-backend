@@ -1,4 +1,4 @@
-package com.cinema.modules.auth.service;
+package com.cinema.modules.auth.model;
 
 public record ClientInfo(String deviceInfo, String ipAddress) {
 
