@@ -24,6 +24,8 @@ public interface ICinemaQueryService {
 
     Set<Long> findHallIdsByCinemaIds(Collection<Long> cinemaIds);
 
+    Map<Long, Integer> countBookableSeatsByHall(Collection<Long> hallIds);
+
     Map<Long, SeatPricingInfoResponse> findSeatPricingInfos(Collection<Long> seatIds);
 
     List<SeatTypeSurchargeResponse> findSeatTypeSurcharges();

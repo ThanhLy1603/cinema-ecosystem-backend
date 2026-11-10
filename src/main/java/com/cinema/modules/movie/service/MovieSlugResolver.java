@@ -25,7 +25,7 @@ public class MovieSlugResolver {
             return generateUniqueSlug(title);
         }
         String slug = requestedSlug.trim();
-        if (movieRepository.existsBySlug(slug)) {
+        if (movieRepository.existsBySlugAndDeletedFalse(slug)) {
             throw slugAlreadyUsed();
         }
         return slug;
@@ -39,16 +39,23 @@ public class MovieSlugResolver {
         if (slug.equals(movie.getSlug())) {
             return slug;
         }
-        if (movieRepository.existsBySlugAndIdNot(slug, movie.getId())) {
+        if (movieRepository.existsBySlugAndDeletedFalseAndIdNot(slug, movie.getId())) {
             throw slugAlreadyUsed();
         }
         return slug;
     }
 
+    public String resolveForRestore(Movie movie) {
+        if (!movieRepository.existsBySlugAndDeletedFalseAndIdNot(movie.getSlug(), movie.getId())) {
+            return movie.getSlug();
+        }
+        return generateUniqueSlug(movie.getTitle());
+    }
+
     private String generateUniqueSlug(String title) {
         String baseSlug = truncate(SlugGenerator.toSlug(title, FALLBACK_SLUG));
         String slug = baseSlug;
-        for (int attempt = 2; movieRepository.existsBySlug(slug); attempt++) {
+        for (int attempt = 2; movieRepository.existsBySlugAndDeletedFalse(slug); attempt++) {
             if (attempt > MAX_SLUG_ATTEMPTS) {
                 throw new AppException("Không tạo được đường dẫn cho phim", HttpStatus.CONFLICT, "SLUG_EXHAUSTED");
             }

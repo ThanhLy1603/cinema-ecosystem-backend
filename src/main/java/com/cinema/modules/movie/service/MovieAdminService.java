@@ -123,8 +123,9 @@ public class MovieAdminService implements IMovieAdminService {
     @Override
     public MovieDetailResponse restoreMovie(Long movieId) {
         Movie movie = movieViewAssembler.loadMovieWithGenres(movieId, true);
+        movie.setSlug(movieSlugResolver.resolveForRestore(movie));
         movie.restore();
-        movieRepository.save(movie);
+        saveMovie(movie);
         return movieViewAssembler.getMovieDetail(movieId);
     }
 

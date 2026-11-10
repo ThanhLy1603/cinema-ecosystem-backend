@@ -338,10 +338,15 @@ class MovieAdminServiceTest {
         movie.markDeleted(NOW);
         when(movieViewAssembler.loadMovieWithGenres(MOVIE_ID, true)).thenReturn(movie);
 
+        movie.setSlug("mai");
+        when(movieSlugResolver.resolveForRestore(movie)).thenReturn("mai-2");
+        when(movieRepository.saveAndFlush(movie)).thenReturn(movie);
+
         movieAdminService.restoreMovie(MOVIE_ID);
 
         assertFalse(movie.isDeleted());
-        verify(movieRepository).save(movie);
+        assertEquals("mai-2", movie.getSlug());
+        verify(movieRepository).saveAndFlush(movie);
         verify(movieViewAssembler).getMovieDetail(MOVIE_ID);
     }
 

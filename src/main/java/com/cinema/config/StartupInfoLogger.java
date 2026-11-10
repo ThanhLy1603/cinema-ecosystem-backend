@@ -34,7 +34,7 @@ public class StartupInfoLogger {
                   {} is running!
                   Local:   {}
                   Health:  {}/actuator/health
-                  WS info: {}/ws/info
+                  WS info: {}/ws/cinema/info
                   BCrypt("{}"): {}
                 ----------------------------------------------------------""",
                 environment.getProperty("spring.application.name", "Application"),

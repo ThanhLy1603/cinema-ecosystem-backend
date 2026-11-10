@@ -45,8 +45,8 @@ class MovieSlugResolverTest {
 
     @Test
     void createAddsNumericSuffixWhenSlugIsTaken() {
-        when(movieRepository.existsBySlug("mai")).thenReturn(true);
-        when(movieRepository.existsBySlug("mai-2")).thenReturn(true);
+        when(movieRepository.existsBySlugAndDeletedFalse("mai")).thenReturn(true);
+        when(movieRepository.existsBySlugAndDeletedFalse("mai-2")).thenReturn(true);
 
         assertEquals("mai-3", movieSlugResolver.resolveForCreate(null, "Mai"));
     }
@@ -68,7 +68,7 @@ class MovieSlugResolverTest {
 
     @Test
     void createGivesUpAfterTooManyCollisions() {
-        when(movieRepository.existsBySlug(anyString())).thenReturn(true);
+        when(movieRepository.existsBySlugAndDeletedFalse(anyString())).thenReturn(true);
 
         AppException appException =
                 assertThrows(AppException.class, () -> movieSlugResolver.resolveForCreate(null, "Mai"));
@@ -83,7 +83,7 @@ class MovieSlugResolverTest {
 
     @Test
     void createRejectsRequestedSlugOfAnotherMovie() {
-        when(movieRepository.existsBySlug("mai")).thenReturn(true);
+        when(movieRepository.existsBySlugAndDeletedFalse("mai")).thenReturn(true);
 
         AppException appException =
                 assertThrows(AppException.class, () -> movieSlugResolver.resolveForCreate("mai", "Khác"));
@@ -96,13 +96,13 @@ class MovieSlugResolverTest {
     void updateKeepsCurrentSlugWhenRequestIsBlank() {
         assertEquals("mai", movieSlugResolver.resolveForUpdate(movie("mai"), null));
         assertEquals("mai", movieSlugResolver.resolveForUpdate(movie("mai"), ""));
-        verify(movieRepository, never()).existsBySlugAndIdNot(anyString(), org.mockito.ArgumentMatchers.anyLong());
+        verify(movieRepository, never()).existsBySlugAndDeletedFalseAndIdNot(anyString(), org.mockito.ArgumentMatchers.anyLong());
     }
 
     @Test
     void updateDoesNotRecheckUnchangedSlug() {
         assertEquals("mai", movieSlugResolver.resolveForUpdate(movie("mai"), "mai"));
-        verify(movieRepository, never()).existsBySlugAndIdNot(anyString(), org.mockito.ArgumentMatchers.anyLong());
+        verify(movieRepository, never()).existsBySlugAndDeletedFalseAndIdNot(anyString(), org.mockito.ArgumentMatchers.anyLong());
     }
 
     @Test
@@ -112,12 +112,36 @@ class MovieSlugResolverTest {
 
     @Test
     void updateRejectsSlugOfAnotherMovie() {
-        when(movieRepository.existsBySlugAndIdNot("khac", MOVIE_ID)).thenReturn(true);
+        when(movieRepository.existsBySlugAndDeletedFalseAndIdNot("khac", MOVIE_ID)).thenReturn(true);
 
         AppException appException =
                 assertThrows(AppException.class, () -> movieSlugResolver.resolveForUpdate(movie("mai"), "khac"));
 
         assertEquals("MOVIE_SLUG_EXISTS", appException.getErrorCode());
+    }
+
+    @Test
+    void createIgnoresSoftDeletedMoviesWhenCheckingRequestedSlug() {
+        when(movieRepository.existsBySlugAndDeletedFalse("mai")).thenReturn(false);
+
+        assertEquals("mai", movieSlugResolver.resolveForCreate("mai", "Mai"));
+    }
+
+    @Test
+    void restoreKeepsSlugWhenNoActiveMovieUsesIt() {
+        when(movieRepository.existsBySlugAndDeletedFalseAndIdNot("mai", MOVIE_ID)).thenReturn(false);
+
+        assertEquals("mai", movieSlugResolver.resolveForRestore(movie("mai")));
+    }
+
+    @Test
+    void restoreGeneratesNewSlugWhenAnActiveMovieNowUsesIt() {
+        Movie deletedMovie = movie("mai");
+        deletedMovie.setTitle("Mai");
+        when(movieRepository.existsBySlugAndDeletedFalseAndIdNot("mai", MOVIE_ID)).thenReturn(true);
+        when(movieRepository.existsBySlugAndDeletedFalse("mai")).thenReturn(true);
+
+        assertEquals("mai-2", movieSlugResolver.resolveForRestore(deletedMovie));
     }
 
     private Movie movie(String slug) {

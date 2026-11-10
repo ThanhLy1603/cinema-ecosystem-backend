@@ -108,6 +108,23 @@ public class CinemaQueryService implements ICinemaQueryService {
     }
 
     @Override
+    public Map<Long, Integer> countBookableSeatsByHall(Collection<Long> hallIds) {
+        Map<Long, Integer> bookableSeatCounts = new HashMap<>();
+        if (hallIds == null || hallIds.isEmpty()) {
+            return bookableSeatCounts;
+        }
+        namedParameterJdbcTemplate.query(
+                "select seat.hall_id, count(*) as seat_count from seats seat "
+                        + "where seat.hall_id in (:hallIds) and seat.is_deleted = false and seat.status = :activeStatus "
+                        + "group by seat.hall_id",
+                new MapSqlParameterSource("hallIds", hallIds).addValue("activeStatus", ACTIVE_STATUS),
+                resultSet -> {
+                    bookableSeatCounts.put(resultSet.getLong("hall_id"), resultSet.getInt("seat_count"));
+                });
+        return bookableSeatCounts;
+    }
+
+    @Override
     public Map<Long, SeatPricingInfoResponse> findSeatPricingInfos(Collection<Long> seatIds) {
         Map<Long, SeatPricingInfoResponse> seatPricingInfoResponses = new HashMap<>();
         if (seatIds == null || seatIds.isEmpty()) {
