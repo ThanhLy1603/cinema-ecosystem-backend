@@ -13,6 +13,8 @@ public enum MediaPurpose {
             Set.of("ROLE_ADMIN", "ROLE_MANAGER")),
     PERSON_AVATAR("image", "cinema/persons", List.of("jpg", "jpeg", "png", "webp"), 3L * 1024 * 1024,
             Set.of("ROLE_ADMIN", "ROLE_MANAGER")),
+    FNB_IMAGE("image", "cinema/fnb", List.of("jpg", "jpeg", "png", "webp"), 3L * 1024 * 1024,
+            Set.of("ROLE_ADMIN", "ROLE_MANAGER")),
     FACILITY_ICON("image", "cinema/facilities", List.of("jpg", "jpeg", "png", "webp", "svg"), 2L * 1024 * 1024,
             Set.of("ROLE_ADMIN")),
     USER_AVATAR("image", "cinema/users", List.of("jpg", "jpeg", "png", "webp"), 3L * 1024 * 1024, Set.of());
