@@ -122,7 +122,7 @@ class CinemaPublicServiceTest {
         activeCinema.setStatus(CinemaStatus.ACTIVE);
         when(hallRepository.findByIdAndDeleted(10L, false)).thenReturn(Optional.of(hall(10L, HallStatus.ACTIVE)));
         when(cinemaRepository.findByIdAndDeleted(1L, false)).thenReturn(Optional.of(activeCinema));
-        when(seatRepository.findAllByHallIdOrderBySeatRowAscSeatNumberAsc(10L)).thenReturn(List.of());
+        when(seatRepository.findAllByHallIdAndDeletedFalseOrderBySeatRowAscSeatNumberAsc(10L)).thenReturn(List.of());
 
         SeatLayoutResponse seatLayoutResponse = cinemaPublicService.findPublicSeatLayout(10L);
 

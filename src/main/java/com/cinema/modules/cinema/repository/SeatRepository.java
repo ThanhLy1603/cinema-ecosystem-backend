@@ -11,7 +11,7 @@ import java.util.List;
 public interface SeatRepository extends JpaRepository<Seat, Long> {
 
     @EntityGraph(attributePaths = "seatType")
-    List<Seat> findAllByHallIdOrderBySeatRowAscSeatNumberAsc(Long hallId);
+    List<Seat> findAllByHallIdAndDeletedFalseOrderBySeatRowAscSeatNumberAsc(Long hallId);
 
-    long countByHallId(Long hallId);
+    long countByHallIdAndDeletedFalse(Long hallId);
 }

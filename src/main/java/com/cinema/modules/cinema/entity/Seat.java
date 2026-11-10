@@ -1,5 +1,6 @@
 package com.cinema.modules.cinema.entity;
 
+import com.cinema.common.entity.SoftDeleteEntity;
 import com.cinema.modules.cinema.enums.SeatStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -12,7 +13,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -21,12 +21,8 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @Entity
-@Table(
-        name = "seats",
-        uniqueConstraints = @UniqueConstraint(
-                name = "uq_hall_seat",
-                columnNames = {"hall_id", "seat_row", "seat_number"}))
-public class Seat {
+@Table(name = "seats")
+public class Seat extends SoftDeleteEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -99,7 +99,7 @@ public class CinemaPublicService implements ICinemaPublicService {
             throw CinemaAccessGuard.hallNotFound();
         }
         return CinemaMapper.toSeatLayoutResponse(
-                hall, seatRepository.findAllByHallIdOrderBySeatRowAscSeatNumberAsc(hallId));
+                hall, seatRepository.findAllByHallIdAndDeletedFalseOrderBySeatRowAscSeatNumberAsc(hallId));
     }
 
     private List<CinemaResponse> loadPublicCinemas(String city) {

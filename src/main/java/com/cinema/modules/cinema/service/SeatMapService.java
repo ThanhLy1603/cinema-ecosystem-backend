@@ -65,7 +65,7 @@ public class SeatMapService implements ISeatMapService {
     public SeatLayoutResponse getSeatMap(Long actorUserId, Long hallId) {
         Hall hall = cinemaAccessGuard.requireAccessibleHall(actorUserId, hallId);
         return CinemaMapper.toSeatLayoutResponse(
-                hall, seatRepository.findAllByHallIdOrderBySeatRowAscSeatNumberAsc(hallId));
+                hall, seatRepository.findAllByHallIdAndDeletedFalseOrderBySeatRowAscSeatNumberAsc(hallId));
     }
 
     @Transactional
@@ -83,7 +83,7 @@ public class SeatMapService implements ISeatMapService {
     public SeatLayoutResponse generateSeats(
             Long actorUserId, Long hallId, GenerateSeatsRequest generateSeatsRequest) {
         Hall hall = cinemaAccessGuard.requireAccessibleHall(actorUserId, hallId);
-        if (seatRepository.countByHallId(hallId) > 0) {
+        if (seatRepository.countByHallIdAndDeletedFalse(hallId) > 0) {
             throw new AppException(
                     "Phòng chiếu đã có sơ đồ ghế, hãy chỉnh sửa trực tiếp trên sơ đồ",
                     HttpStatus.CONFLICT,
@@ -111,7 +111,7 @@ public class SeatMapService implements ISeatMapService {
         Map<String, SeatType> seatTypesByCode = loadSeatTypesByCode();
         SeatMapValidator.validate(seatCellRequests, seatTypesByCode);
 
-        List<Seat> existingSeats = seatRepository.findAllByHallIdOrderBySeatRowAscSeatNumberAsc(hall.getId());
+        List<Seat> existingSeats = seatRepository.findAllByHallIdAndDeletedFalseOrderBySeatRowAscSeatNumberAsc(hall.getId());
         Map<String, Seat> existingSeatsByLabel = existingSeats.stream()
                 .collect(Collectors.toMap(
                         seat -> SeatMapValidator.label(seat.getSeatRow(), seat.getSeatNumber()),
@@ -123,9 +123,11 @@ public class SeatMapService implements ISeatMapService {
         List<Seat> removedSeats = existingSeats.stream()
                 .filter(seat -> !requestedLabels.contains(SeatMapValidator.label(seat.getSeatRow(), seat.getSeatNumber())))
                 .toList();
-        rejectRemovalOfSeatsInUse(removedSeats);
+        Instant now = Instant.now(clock);
+        rejectRemovalOfSeatsWithUpcomingShowtimes(removedSeats, now);
         if (!removedSeats.isEmpty()) {
-            seatRepository.deleteAllByIdInBatch(removedSeats.stream().map(Seat::getId).toList());
+            removedSeats.forEach(removedSeat -> removedSeat.markDeleted(now));
+            seatRepository.saveAll(removedSeats);
         }
 
         List<Seat> resultingSeats = new ArrayList<>();
@@ -145,17 +147,18 @@ public class SeatMapService implements ISeatMapService {
         seatRepository.saveAll(resultingSeats);
 
         hall.setTotalSeats(resultingSeats.size());
-        hall.setSeatMapUpdatedAt(Instant.now(clock));
+        hall.setSeatMapUpdatedAt(now);
         Hall savedHall = hallRepository.saveAndFlush(hall);
         publicCinemaCache.evictAfterCommit();
         return CinemaMapper.toSeatLayoutResponse(savedHall, resultingSeats);
     }
 
-    private void rejectRemovalOfSeatsInUse(List<Seat> removedSeats) {
+    private void rejectRemovalOfSeatsWithUpcomingShowtimes(List<Seat> removedSeats, Instant now) {
         if (removedSeats.isEmpty()) {
             return;
         }
-        Set<Long> seatIdsInUse = hallUsageChecker.findSeatIdsInUse(removedSeats.stream().map(Seat::getId).toList());
+        Set<Long> seatIdsInUse = hallUsageChecker.findSeatIdsWithUpcomingShowtimes(
+                removedSeats.stream().map(Seat::getId).toList(), now);
         if (seatIdsInUse.isEmpty()) {
             return;
         }
@@ -165,7 +168,7 @@ public class SeatMapService implements ISeatMapService {
                 .limit(10)
                 .collect(Collectors.joining(", "));
         throw new AppException(
-                "Không thể xóa ghế đã có lượt giữ chỗ hoặc vé: " + seatLabelsInUse
+                "Không thể xóa ghế còn vé hoặc lượt giữ chỗ cho suất chiếu chưa diễn ra: " + seatLabelsInUse
                         + ". Hãy chuyển ghế sang trạng thái bảo trì thay vì xóa",
                 HttpStatus.CONFLICT,
                 "SEAT_IN_USE");

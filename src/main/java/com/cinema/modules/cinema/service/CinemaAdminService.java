@@ -16,7 +16,7 @@ import com.cinema.modules.cinema.repository.HallRepository;
 import com.cinema.modules.cinema.service.interfaces.ICinemaAdminService;
 import com.cinema.modules.cinema.specification.CinemaSpecifications;
 import com.cinema.modules.cinema.util.CinemaMapper;
-import com.cinema.modules.cinema.util.SlugGenerator;
+import com.cinema.common.util.SlugGenerator;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;

@@ -1,6 +1,11 @@
 package com.cinema.modules.cinema.service;
 
 import com.cinema.modules.cinema.dto.response.CinemaOptionResponse;
+import com.cinema.modules.cinema.dto.response.HallInfoResponse;
+import com.cinema.modules.cinema.dto.response.SeatPricingInfoResponse;
+import com.cinema.modules.cinema.dto.response.SeatTypeSurchargeResponse;
+import com.cinema.modules.cinema.enums.HallStatus;
+import com.cinema.modules.cinema.enums.ScreenType;
 import com.cinema.modules.cinema.service.interfaces.ICinemaQueryService;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -66,5 +71,76 @@ public class CinemaQueryService implements ICinemaQueryService {
                 new MapSqlParameterSource("status", ACTIVE_STATUS),
                 (resultSet, rowNumber) -> new CinemaOptionResponse(
                         resultSet.getLong("id"), resultSet.getString("name"), resultSet.getString("city")));
+    }
+
+    @Override
+    public Map<Long, HallInfoResponse> findHallInfos(Collection<Long> hallIds) {
+        Map<Long, HallInfoResponse> hallInfoResponses = new HashMap<>();
+        if (hallIds == null || hallIds.isEmpty()) {
+            return hallInfoResponses;
+        }
+        namedParameterJdbcTemplate.query(
+                "select hall.id, hall.cinema_id, hall.name, hall.screen_type, hall.status, hall.is_deleted "
+                        + "from halls hall where hall.id in (:hallIds)",
+                new MapSqlParameterSource("hallIds", hallIds),
+                resultSet -> {
+                    HallInfoResponse hallInfoResponse = new HallInfoResponse(
+                            resultSet.getLong("id"),
+                            resultSet.getLong("cinema_id"),
+                            resultSet.getString("name"),
+                            ScreenType.fromCode(resultSet.getString("screen_type")),
+                            HallStatus.valueOf(resultSet.getString("status")),
+                            resultSet.getBoolean("is_deleted"));
+                    hallInfoResponses.put(hallInfoResponse.id(), hallInfoResponse);
+                });
+        return hallInfoResponses;
+    }
+
+    @Override
+    public Set<Long> findHallIdsByCinemaIds(Collection<Long> cinemaIds) {
+        if (cinemaIds == null || cinemaIds.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(namedParameterJdbcTemplate.queryForList(
+                "select hall.id from halls hall where hall.cinema_id in (:cinemaIds) and hall.is_deleted = false",
+                new MapSqlParameterSource("cinemaIds", cinemaIds),
+                Long.class));
+    }
+
+    @Override
+    public Map<Long, SeatPricingInfoResponse> findSeatPricingInfos(Collection<Long> seatIds) {
+        Map<Long, SeatPricingInfoResponse> seatPricingInfoResponses = new HashMap<>();
+        if (seatIds == null || seatIds.isEmpty()) {
+            return seatPricingInfoResponses;
+        }
+        namedParameterJdbcTemplate.query(
+                "select seat.id, seat.hall_id, seat_type.code, seat_type.name, seat_type.default_surcharge, "
+                        + "(seat.is_deleted = false and seat.status = :activeStatus) as bookable "
+                        + "from seats seat join seat_types seat_type on seat_type.id = seat.seat_type_id "
+                        + "where seat.id in (:seatIds)",
+                new MapSqlParameterSource("seatIds", seatIds).addValue("activeStatus", ACTIVE_STATUS),
+                resultSet -> {
+                    SeatPricingInfoResponse seatPricingInfoResponse = new SeatPricingInfoResponse(
+                            resultSet.getLong("id"),
+                            resultSet.getLong("hall_id"),
+                            resultSet.getString("code"),
+                            resultSet.getString("name"),
+                            resultSet.getBigDecimal("default_surcharge"),
+                            resultSet.getBoolean("bookable"));
+                    seatPricingInfoResponses.put(seatPricingInfoResponse.seatId(), seatPricingInfoResponse);
+                });
+        return seatPricingInfoResponses;
+    }
+
+    @Override
+    public List<SeatTypeSurchargeResponse> findSeatTypeSurcharges() {
+        return namedParameterJdbcTemplate.query(
+                "select seat_type.code, seat_type.name, seat_type.default_surcharge "
+                        + "from seat_types seat_type order by seat_type.default_surcharge, seat_type.id",
+                new MapSqlParameterSource(),
+                (resultSet, rowNumber) -> new SeatTypeSurchargeResponse(
+                        resultSet.getString("code"),
+                        resultSet.getString("name"),
+                        resultSet.getBigDecimal("default_surcharge")));
     }
 }

@@ -9,3 +9,7 @@ app:
     secret: <chuỗi ngẫu nhiên tối thiểu 32 byte, tạo bằng: openssl rand -hex 32>
   cookie:
     secure: false
+  cloudinary:
+    cloud-name: your-cloud-name
+    api-key: your-api-key
+    api-secret: your-api-secret

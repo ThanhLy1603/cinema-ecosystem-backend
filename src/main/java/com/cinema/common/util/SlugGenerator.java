@@ -1,4 +1,4 @@
-package com.cinema.modules.cinema.util;
+package com.cinema.common.util;
 
 import java.text.Normalizer;
 import java.util.Locale;

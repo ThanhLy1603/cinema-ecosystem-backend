@@ -30,8 +30,10 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
@@ -122,7 +124,7 @@ class SeatMapServiceTest {
     void saveSeatMapKeepsExistingSeatIdsAndInsertsNewSeats() {
         hall.setVersion(HALL_VERSION);
         Seat existingSeat = seat(11L, "A", 1, standardSeatType);
-        when(seatRepository.findAllByHallIdOrderBySeatRowAscSeatNumberAsc(HALL_ID)).thenReturn(List.of(existingSeat));
+        when(seatRepository.findAllByHallIdAndDeletedFalseOrderBySeatRowAscSeatNumberAsc(HALL_ID)).thenReturn(List.of(existingSeat));
         SeatMapRequest seatMapRequest =
                 new SeatMapRequest(HALL_VERSION, List.of(cell("A", 1, "VIP"), cell("A", 2, "STANDARD")));
 
@@ -134,35 +136,39 @@ class SeatMapServiceTest {
         assertNotNull(seatLayoutResponse.seats().get(1).id());
         assertEquals(2, hall.getTotalSeats());
         assertEquals(NOW, hall.getSeatMapUpdatedAt());
-        verify(seatRepository, never()).deleteAllByIdInBatch(any());
+        assertFalse(existingSeat.isDeleted());
         verify(publicCinemaCache).evictAfterCommit();
     }
 
     @Test
-    void saveSeatMapDeletesSeatsThatAreNotUsedAnywhere() {
+    void saveSeatMapSoftDeletesRemovedSeatsWithoutUpcomingShowtimes() {
         hall.setVersion(HALL_VERSION);
         Seat keptSeat = seat(11L, "A", 1, standardSeatType);
         Seat removedSeat = seat(12L, "A", 2, standardSeatType);
-        when(seatRepository.findAllByHallIdOrderBySeatRowAscSeatNumberAsc(HALL_ID))
+        when(seatRepository.findAllByHallIdAndDeletedFalseOrderBySeatRowAscSeatNumberAsc(HALL_ID))
                 .thenReturn(List.of(keptSeat, removedSeat));
-        when(hallUsageChecker.findSeatIdsInUse(List.of(12L))).thenReturn(Set.of());
+        when(hallUsageChecker.findSeatIdsWithUpcomingShowtimes(List.of(12L), NOW)).thenReturn(Set.of());
         SeatMapRequest seatMapRequest = new SeatMapRequest(HALL_VERSION, List.of(cell("A", 1, "STANDARD")));
 
         SeatLayoutResponse seatLayoutResponse = seatMapService.saveSeatMap(USER_ID, HALL_ID, seatMapRequest);
 
         assertEquals(1, seatLayoutResponse.seats().size());
         assertEquals(1, hall.getTotalSeats());
-        verify(seatRepository).deleteAllByIdInBatch(List.of(12L));
+        assertTrue(removedSeat.isDeleted());
+        assertEquals(NOW, removedSeat.getDeletedAt());
+        assertFalse(keptSeat.isDeleted());
+        verify(seatRepository, never()).deleteAllByIdInBatch(any());
+        verify(seatRepository, never()).delete(any(Seat.class));
     }
 
     @Test
-    void saveSeatMapRefusesToDeleteSeatsThatHaveReservationsOrTickets() {
+    void saveSeatMapRefusesToRemoveSeatsWithTicketsOrHoldsForUpcomingShowtimes() {
         hall.setVersion(HALL_VERSION);
         Seat keptSeat = seat(11L, "A", 1, standardSeatType);
         Seat usedSeat = seat(12L, "A", 2, standardSeatType);
-        when(seatRepository.findAllByHallIdOrderBySeatRowAscSeatNumberAsc(HALL_ID))
+        when(seatRepository.findAllByHallIdAndDeletedFalseOrderBySeatRowAscSeatNumberAsc(HALL_ID))
                 .thenReturn(List.of(keptSeat, usedSeat));
-        when(hallUsageChecker.findSeatIdsInUse(List.of(12L))).thenReturn(Set.of(12L));
+        when(hallUsageChecker.findSeatIdsWithUpcomingShowtimes(List.of(12L), NOW)).thenReturn(Set.of(12L));
         SeatMapRequest seatMapRequest = new SeatMapRequest(HALL_VERSION, List.of(cell("A", 1, "STANDARD")));
 
         AppException appException =
@@ -170,14 +176,26 @@ class SeatMapServiceTest {
 
         assertEquals("SEAT_IN_USE", appException.getErrorCode());
         assertEquals(HttpStatus.CONFLICT, appException.getStatus());
-        verify(seatRepository, never()).deleteAllByIdInBatch(any());
+        assertTrue(appException.getMessage().contains("A2"));
+        assertFalse(usedSeat.isDeleted());
         verify(seatRepository, never()).saveAll(anyList());
     }
 
     @Test
+    void saveSeatMapDoesNotAskTheUsageCheckerWhenNothingIsRemoved() {
+        hall.setVersion(HALL_VERSION);
+        Seat existingSeat = seat(11L, "A", 1, standardSeatType);
+        when(seatRepository.findAllByHallIdAndDeletedFalseOrderBySeatRowAscSeatNumberAsc(HALL_ID)).thenReturn(List.of(existingSeat));
+
+        seatMapService.saveSeatMap(USER_ID, HALL_ID, new SeatMapRequest(HALL_VERSION, List.of(cell("A", 1, "STANDARD"))));
+
+        verify(hallUsageChecker, never()).findSeatIdsWithUpcomingShowtimes(any(), any());
+    }
+
+    @Test
     void generateSeatsBuildsTenByTenGridWithoutDuplicates() {
-        when(seatRepository.countByHallId(HALL_ID)).thenReturn(0L);
-        when(seatRepository.findAllByHallIdOrderBySeatRowAscSeatNumberAsc(HALL_ID)).thenReturn(List.of());
+        when(seatRepository.countByHallIdAndDeletedFalse(HALL_ID)).thenReturn(0L);
+        when(seatRepository.findAllByHallIdAndDeletedFalseOrderBySeatRowAscSeatNumberAsc(HALL_ID)).thenReturn(List.of());
 
         SeatLayoutResponse seatLayoutResponse =
                 seatMapService.generateSeats(USER_ID, HALL_ID, new GenerateSeatsRequest(10, 10, "STANDARD"));
@@ -195,8 +213,8 @@ class SeatMapServiceTest {
 
     @Test
     void generateSeatsWithDoubleSeatsSkipsTheCoveredColumn() {
-        when(seatRepository.countByHallId(HALL_ID)).thenReturn(0L);
-        when(seatRepository.findAllByHallIdOrderBySeatRowAscSeatNumberAsc(HALL_ID)).thenReturn(List.of());
+        when(seatRepository.countByHallIdAndDeletedFalse(HALL_ID)).thenReturn(0L);
+        when(seatRepository.findAllByHallIdAndDeletedFalseOrderBySeatRowAscSeatNumberAsc(HALL_ID)).thenReturn(List.of());
 
         SeatLayoutResponse seatLayoutResponse =
                 seatMapService.generateSeats(USER_ID, HALL_ID, new GenerateSeatsRequest(1, 6, "SWEETBOX"));
@@ -208,7 +226,7 @@ class SeatMapServiceTest {
 
     @Test
     void generateSeatsRefusesHallThatAlreadyHasSeats() {
-        when(seatRepository.countByHallId(HALL_ID)).thenReturn(4L);
+        when(seatRepository.countByHallIdAndDeletedFalse(HALL_ID)).thenReturn(4L);
 
         AppException appException = assertThrows(
                 AppException.class,
