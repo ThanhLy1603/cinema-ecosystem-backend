@@ -6,6 +6,7 @@ import java.util.List;
 
 public record PublicMovieShowtimesResponse(
         Long movieId,
+        String movieSlug,
         String title,
         String posterUrl,
         AgeRating rated,

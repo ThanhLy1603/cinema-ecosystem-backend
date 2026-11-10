@@ -14,7 +14,7 @@ public interface IMoviePublicService {
     PageResponse<MovieResponse> searchMovies(
             String keyword, Long genreId, MovieStatus status, AgeRating rated, int page, int size);
 
-    MovieDetailResponse getMovie(Long movieId);
+    MovieDetailResponse getMovieBySlug(String movieSlug);
 
     List<GenreResponse> findGenres();
 }

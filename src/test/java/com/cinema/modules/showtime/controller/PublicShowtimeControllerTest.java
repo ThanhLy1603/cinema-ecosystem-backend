@@ -54,7 +54,7 @@ class PublicShowtimeControllerTest {
                 1L, 5L, "Phòng 01", ScreenType.IMAX, Instant.parse("2026-01-02T12:00:00Z"),
                 Instant.parse("2026-01-02T14:00:00Z"), new BigDecimal("90000"));
         when(showtimePublicService.findShowtimes(1L, LocalDate.of(2026, 1, 2), 10L)).thenReturn(List.of(
-                new PublicMovieShowtimesResponse(10L, "Mai", null, AgeRating.C16, 131, List.of(publicShowtimeResponse))));
+                new PublicMovieShowtimesResponse(10L, "mai", "Mai", null, AgeRating.C16, 131, List.of(publicShowtimeResponse))));
 
         mockMvc.perform(get("/api/v1/showtimes/public")
                         .param("cinemaId", "1").param("date", "2026-01-02").param("movieId", "10"))

@@ -18,13 +18,14 @@ import java.util.Map;
 public class MovieQueryService implements IMovieQueryService {
 
     private static final String SELECT_MOVIE_INFO =
-            "select movie.id, movie.title, movie.duration_minutes, movie.rated, movie.poster_url, movie.status, "
+            "select movie.id, movie.title, movie.slug, movie.duration_minutes, movie.rated, movie.poster_url, movie.status, "
                     + "movie.is_deleted from movies movie ";
 
     private static final RowMapper<MovieInfoResponse> MOVIE_INFO_ROW_MAPPER = (resultSet, rowNumber) ->
             new MovieInfoResponse(
                     resultSet.getLong("id"),
                     resultSet.getString("title"),
+                    resultSet.getString("slug"),
                     resultSet.getInt("duration_minutes"),
                     AgeRating.valueOf(resultSet.getString("rated")),
                     resultSet.getString("poster_url"),

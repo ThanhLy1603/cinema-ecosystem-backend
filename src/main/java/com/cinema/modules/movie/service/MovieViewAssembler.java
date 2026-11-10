@@ -59,6 +59,13 @@ public class MovieViewAssembler {
         return MovieMapper.toMovieDetailResponse(movie, movieCasts);
     }
 
+    public MovieDetailResponse getMovieDetailBySlug(String movieSlug) {
+        Movie movie = movieRepository.findWithGenresBySlugAndDeleted(movieSlug, false)
+                .orElseThrow(MovieViewAssembler::movieNotFound);
+        List<MovieCast> movieCasts = movieCastRepository.findByMovieIdInOrderByIdAsc(List.of(movie.getId()));
+        return MovieMapper.toMovieDetailResponse(movie, movieCasts);
+    }
+
     public Movie loadMovieWithGenres(Long movieId, boolean deleted) {
         return movieRepository.findWithGenresByIdAndDeleted(movieId, deleted)
                 .orElseThrow(MovieViewAssembler::movieNotFound);

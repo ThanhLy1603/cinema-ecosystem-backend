@@ -113,7 +113,7 @@ class ShowtimeAdminServiceTest {
     private void givenBookableHallAndMovie(HallStatus hallStatus, MovieStatus movieStatus, int durationMinutes) {
         givenActiveCinemaWithHall(hallStatus);
         when(movieQueryService.findMovieInfos(List.of(MOVIE_ID))).thenReturn(Map.of(
-                MOVIE_ID, new MovieInfoResponse(MOVIE_ID, "Mai", durationMinutes, AgeRating.C16, null, movieStatus, false)));
+                MOVIE_ID, new MovieInfoResponse(MOVIE_ID, "Mai", "mai", durationMinutes, AgeRating.C16, null, movieStatus, false)));
     }
 
     private ShowtimeRequest request(Instant startTime) {

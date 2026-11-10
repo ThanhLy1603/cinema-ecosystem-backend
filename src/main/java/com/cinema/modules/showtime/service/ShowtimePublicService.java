@@ -114,6 +114,7 @@ public class ShowtimePublicService implements IShowtimePublicService {
             MovieInfoResponse movieInfoResponse, List<PublicShowtimeResponse> publicShowtimeResponses) {
         return new PublicMovieShowtimesResponse(
                 movieInfoResponse.id(),
+                movieInfoResponse.slug(),
                 movieInfoResponse.title(),
                 movieInfoResponse.posterUrl(),
                 movieInfoResponse.rated(),

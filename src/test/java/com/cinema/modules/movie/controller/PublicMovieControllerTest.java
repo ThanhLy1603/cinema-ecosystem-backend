@@ -52,7 +52,7 @@ class PublicMovieControllerTest {
     @Test
     void searchPassesFiltersAndExposesAgeRatingInCamelCase() throws Exception {
         MovieResponse movieResponse = new MovieResponse(
-                1L, "Mai", null, 131, LocalDate.of(2026, 2, 10), null, AgeRating.C18, "https://img/p.jpg", null, null,
+                1L, "Mai", "mai", null, 131, LocalDate.of(2026, 2, 10), null, AgeRating.C18, "https://img/p.jpg", null, null,
                 MovieStatus.NOW_SHOWING, List.of(new GenreResponse(2L, "Tâm Lý", "tam-ly")), false);
         when(moviePublicService.searchMovies("mai", 2L, MovieStatus.NOW_SHOWING, AgeRating.C18, 0, 12))
                 .thenReturn(new PageResponse<>(List.of(movieResponse), 0, 12, 1, 1));
@@ -76,7 +76,7 @@ class PublicMovieControllerTest {
     }
 
     @Test
-    void genresEndpointIsNotShadowedByMovieIdEndpoint() throws Exception {
+    void genresEndpointIsNotShadowedBySlugEndpoint() throws Exception {
         when(moviePublicService.findGenres()).thenReturn(List.of(new GenreResponse(1L, "Hành Động", "hanh-dong")));
 
         mockMvc.perform(get("/api/v1/movies/public/genres"))
@@ -87,13 +87,14 @@ class PublicMovieControllerTest {
     @Test
     void detailIncludesCast() throws Exception {
         MovieDetailResponse movieDetailResponse = new MovieDetailResponse(
-                1L, "Mai", null, 131, LocalDate.of(2026, 2, 10), null, AgeRating.C16, null, null, null, "Mô tả",
+                1L, "Mai", "mai", null, 131, LocalDate.of(2026, 2, 10), null, AgeRating.C16, null, null, null, "Mô tả",
                 MovieStatus.NOW_SHOWING, List.of(),
                 List.of(new MovieCastResponse(5L, "Trấn Thành", null, CastRoleType.DIRECTOR, null)), false);
-        when(moviePublicService.getMovie(1L)).thenReturn(movieDetailResponse);
+        when(moviePublicService.getMovieBySlug("mai")).thenReturn(movieDetailResponse);
 
-        mockMvc.perform(get("/api/v1/movies/public/1"))
+        mockMvc.perform(get("/api/v1/movies/public/slug/mai"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.slug").value("mai"))
                 .andExpect(jsonPath("$.data.description").value("Mô tả"))
                 .andExpect(jsonPath("$.data.casts[0].roleType").value("DIRECTOR"))
                 .andExpect(jsonPath("$.data.casts[0].personName").value("Trấn Thành"));
@@ -101,10 +102,10 @@ class PublicMovieControllerTest {
 
     @Test
     void missingMovieReturnsNotFoundErrorCode() throws Exception {
-        when(moviePublicService.getMovie(9L))
+        when(moviePublicService.getMovieBySlug("khong-co"))
                 .thenThrow(new AppException("Không tìm thấy phim", HttpStatus.NOT_FOUND, "MOVIE_NOT_FOUND"));
 
-        mockMvc.perform(get("/api/v1/movies/public/9"))
+        mockMvc.perform(get("/api/v1/movies/public/slug/khong-co"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("MOVIE_NOT_FOUND"));
     }

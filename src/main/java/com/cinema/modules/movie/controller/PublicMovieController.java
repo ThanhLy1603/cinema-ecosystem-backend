@@ -44,8 +44,8 @@ public class PublicMovieController {
         return ResponseEntity.ok(ApiResponse.success(moviePublicService.findGenres()));
     }
 
-    @GetMapping("/{movieId}")
-    public ResponseEntity<ApiResponse<MovieDetailResponse>> getMovie(@PathVariable Long movieId) {
-        return ResponseEntity.ok(ApiResponse.success(moviePublicService.getMovie(movieId)));
+    @GetMapping("/slug/{movieSlug}")
+    public ResponseEntity<ApiResponse<MovieDetailResponse>> getMovieBySlug(@PathVariable String movieSlug) {
+        return ResponseEntity.ok(ApiResponse.success(moviePublicService.getMovieBySlug(movieSlug)));
     }
 }

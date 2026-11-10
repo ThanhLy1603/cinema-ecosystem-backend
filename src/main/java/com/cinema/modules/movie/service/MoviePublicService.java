@@ -36,8 +36,8 @@ public class MoviePublicService implements IMoviePublicService {
 
     @Transactional(readOnly = true)
     @Override
-    public MovieDetailResponse getMovie(Long movieId) {
-        return movieViewAssembler.getMovieDetail(movieId);
+    public MovieDetailResponse getMovieBySlug(String movieSlug) {
+        return movieViewAssembler.getMovieDetailBySlug(movieSlug);
     }
 
     @Transactional(readOnly = true)

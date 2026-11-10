@@ -43,6 +43,7 @@ public class MovieAdminService implements IMovieAdminService {
     private final PersonRepository personRepository;
     private final MovieViewAssembler movieViewAssembler;
     private final MovieUsageChecker movieUsageChecker;
+    private final MovieSlugResolver movieSlugResolver;
     private final Clock clock;
 
     public MovieAdminService(
@@ -52,6 +53,7 @@ public class MovieAdminService implements IMovieAdminService {
             PersonRepository personRepository,
             MovieViewAssembler movieViewAssembler,
             MovieUsageChecker movieUsageChecker,
+            MovieSlugResolver movieSlugResolver,
             Clock clock) {
         this.movieRepository = movieRepository;
         this.movieCastRepository = movieCastRepository;
@@ -59,6 +61,7 @@ public class MovieAdminService implements IMovieAdminService {
         this.personRepository = personRepository;
         this.movieViewAssembler = movieViewAssembler;
         this.movieUsageChecker = movieUsageChecker;
+        this.movieSlugResolver = movieSlugResolver;
         this.clock = clock;
     }
 
@@ -82,6 +85,7 @@ public class MovieAdminService implements IMovieAdminService {
         validateDates(movieRequest);
         Movie movie = new Movie();
         applyRequest(movie, movieRequest);
+        movie.setSlug(movieSlugResolver.resolveForCreate(movieRequest.slug(), movie.getTitle()));
         Movie savedMovie = saveMovie(movie);
         List<MovieCast> movieCasts = replaceCasts(savedMovie.getId(), movieRequest.casts());
         return MovieMapper.toMovieDetailResponse(savedMovie, movieCasts);
@@ -92,7 +96,9 @@ public class MovieAdminService implements IMovieAdminService {
     public MovieDetailResponse updateMovie(Long movieId, MovieRequest movieRequest) {
         validateDates(movieRequest);
         Movie movie = movieViewAssembler.loadMovieWithGenres(movieId, false);
+        assertScheduledShowtimesStayConsistent(movie, movieRequest);
         applyRequest(movie, movieRequest);
+        movie.setSlug(movieSlugResolver.resolveForUpdate(movie, movieRequest.slug()));
         Movie savedMovie = saveMovie(movie);
         List<MovieCast> movieCasts = replaceCasts(movieId, movieRequest.casts());
         return MovieMapper.toMovieDetailResponse(savedMovie, movieCasts);
@@ -120,6 +126,27 @@ public class MovieAdminService implements IMovieAdminService {
         movie.restore();
         movieRepository.save(movie);
         return movieViewAssembler.getMovieDetail(movieId);
+    }
+
+    private void assertScheduledShowtimesStayConsistent(Movie movie, MovieRequest movieRequest) {
+        boolean durationChanged = movie.getDurationMinutes() != movieRequest.durationMinutes();
+        boolean becomingEnded = movieRequest.status() == MovieStatus.ENDED && movie.getStatus() != MovieStatus.ENDED;
+        if (!durationChanged && !becomingEnded) {
+            return;
+        }
+        if (movieUsageChecker.countUpcomingShowtimesByMovie(movie.getId(), Instant.now(clock)) == 0) {
+            return;
+        }
+        if (durationChanged) {
+            throw new AppException(
+                    "Phim còn suất chiếu chưa diễn ra, hãy hủy các suất chiếu trước khi đổi thời lượng",
+                    HttpStatus.CONFLICT,
+                    "MOVIE_DURATION_LOCKED");
+        }
+        throw new AppException(
+                "Phim còn suất chiếu chưa diễn ra, hãy hủy các suất chiếu trước khi chuyển sang ngừng chiếu",
+                HttpStatus.CONFLICT,
+                "MOVIE_HAS_UPCOMING_SHOWTIMES");
     }
 
     private void validateDates(MovieRequest movieRequest) {
@@ -192,7 +219,10 @@ public class MovieAdminService implements IMovieAdminService {
         try {
             return movieRepository.saveAndFlush(movie);
         } catch (DataIntegrityViolationException dataIntegrityViolationException) {
-            throw new AppException("Dữ liệu phim không hợp lệ", HttpStatus.CONFLICT, "MOVIE_CONFLICT");
+            throw new AppException(
+                    "Dữ liệu phim không hợp lệ hoặc đường dẫn phim vừa bị dùng, vui lòng thử lại",
+                    HttpStatus.CONFLICT,
+                    "MOVIE_CONFLICT");
         }
     }
 

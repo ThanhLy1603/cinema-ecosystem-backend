@@ -44,7 +44,7 @@ class AdminMovieControllerTest {
     @Test
     void createReturns201WithDetail() throws Exception {
         MovieDetailResponse movieDetailResponse = new MovieDetailResponse(
-                1L, "Mai", null, 131, LocalDate.of(2026, 2, 10), null, AgeRating.C16, null, null, null, null,
+                1L, "Mai", "mai", null, 131, LocalDate.of(2026, 2, 10), null, AgeRating.C16, null, null, null, null,
                 MovieStatus.NOW_SHOWING, List.of(), List.of(), false);
         when(movieAdminService.createMovie(any(MovieRequest.class))).thenReturn(movieDetailResponse);
 
@@ -73,6 +73,51 @@ class AdminMovieControllerTest {
                 .andExpect(jsonPath("$.data.posterUrl").exists());
 
         verify(movieAdminService, never()).createMovie(any());
+    }
+
+    @Test
+    void createRejectsSlugWithUppercaseOrAccents() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/movies")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Mai","slug":"Mai Đẹp","durationMinutes":100,"releaseDate":"2026-02-10",
+                                 "rated":"C16","status":"NOW_SHOWING"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.data.slug").exists());
+
+        verify(movieAdminService, never()).createMovie(any());
+    }
+
+    @Test
+    void createRejectsNullGenreIdAndNullCast() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/movies")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Mai","durationMinutes":100,"releaseDate":"2026-02-10","rated":"C16",
+                                 "status":"NOW_SHOWING","genreIds":[null],"casts":[null]}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+
+        verify(movieAdminService, never()).createMovie(any());
+    }
+
+    @Test
+    void createAcceptsWellFormedSlug() throws Exception {
+        MovieDetailResponse movieDetailResponse = new MovieDetailResponse(
+                1L, "Mai", "mai-2026", null, 131, LocalDate.of(2026, 2, 10), null, AgeRating.C16, null, null, null, null,
+                MovieStatus.NOW_SHOWING, List.of(), List.of(), false);
+        when(movieAdminService.createMovie(any(MovieRequest.class))).thenReturn(movieDetailResponse);
+
+        mockMvc.perform(post("/api/v1/admin/movies")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Mai","slug":"mai-2026","durationMinutes":131,"releaseDate":"2026-02-10",
+                                 "rated":"C16","status":"NOW_SHOWING"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.slug").value("mai-2026"));
     }
 
     @Test

@@ -15,13 +15,17 @@ public final class SlugGenerator {
     }
 
     public static String toSlug(String name) {
+        return toSlug(name, FALLBACK_SLUG);
+    }
+
+    public static String toSlug(String name, String fallbackSlug) {
         if (name == null) {
-            return FALLBACK_SLUG;
+            return fallbackSlug;
         }
         String withoutDiacritics = DIACRITICS.matcher(Normalizer.normalize(name, Normalizer.Form.NFD)).replaceAll("");
         String lowerCased = withoutDiacritics.replace('đ', 'd').replace('Đ', 'D').toLowerCase(Locale.ROOT);
         String hyphenated = NON_ALPHANUMERIC.matcher(lowerCased).replaceAll("-");
         String slug = EDGE_HYPHENS.matcher(hyphenated).replaceAll("");
-        return slug.isEmpty() ? FALLBACK_SLUG : slug;
+        return slug.isEmpty() ? fallbackSlug : slug;
     }
 }

@@ -36,6 +36,7 @@ public final class MovieMapper {
         return new MovieResponse(
                 movie.getId(),
                 movie.getTitle(),
+                movie.getSlug(),
                 movie.getOriginalTitle(),
                 movie.getDurationMinutes(),
                 movie.getReleaseDate(),
@@ -53,6 +54,7 @@ public final class MovieMapper {
         return new MovieDetailResponse(
                 movie.getId(),
                 movie.getTitle(),
+                movie.getSlug(),
                 movie.getOriginalTitle(),
                 movie.getDurationMinutes(),
                 movie.getReleaseDate(),

@@ -116,6 +116,6 @@ class ShowtimeConflictDetectorTest {
     }
 
     private MovieInfoResponse movieInfo(String title) {
-        return new MovieInfoResponse(9L, title, 120, AgeRating.C16, null, MovieStatus.NOW_SHOWING, false);
+        return new MovieInfoResponse(9L, title, "mai", 120, AgeRating.C16, null, MovieStatus.NOW_SHOWING, false);
     }
 }

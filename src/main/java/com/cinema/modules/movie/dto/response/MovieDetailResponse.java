@@ -9,6 +9,7 @@ import java.util.List;
 public record MovieDetailResponse(
         Long id,
         String title,
+        String slug,
         String originalTitle,
         int durationMinutes,
         LocalDate releaseDate,

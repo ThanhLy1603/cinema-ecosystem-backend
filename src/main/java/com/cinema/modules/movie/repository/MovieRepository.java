@@ -18,4 +18,11 @@ public interface MovieRepository extends JpaRepository<Movie, Long>, JpaSpecific
 
     @EntityGraph(attributePaths = "genres")
     Optional<Movie> findWithGenresByIdAndDeleted(Long movieId, boolean deleted);
+
+    @EntityGraph(attributePaths = "genres")
+    Optional<Movie> findWithGenresBySlugAndDeleted(String slug, boolean deleted);
+
+    boolean existsBySlug(String slug);
+
+    boolean existsBySlugAndIdNot(String slug, Long movieId);
 }

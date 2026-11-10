@@ -18,6 +18,12 @@ public record MovieRequest(
         @Size(max = 255, message = "Tên phim tối đa 255 ký tự")
         String title,
 
+        @Size(max = 200, message = "Đường dẫn tối đa 200 ký tự")
+        @Pattern(
+                regexp = "^([a-z0-9]+(-[a-z0-9]+)*)?$",
+                message = "Đường dẫn chỉ gồm chữ thường không dấu, số và dấu gạch ngang")
+        String slug,
+
         @Size(max = 255, message = "Tên gốc tối đa 255 ký tự")
         String originalTitle,
 
@@ -53,9 +59,8 @@ public record MovieRequest(
         MovieStatus status,
 
         @Size(max = 10, message = "Mỗi phim tối đa 10 thể loại")
-        List<Long> genreIds,
+        List<@NotNull(message = "Thể loại không hợp lệ") Long> genreIds,
 
-        @Valid
         @Size(max = 60, message = "Mỗi phim tối đa 60 nghệ sĩ")
-        List<MovieCastRequest> casts) {
+        List<@NotNull(message = "Nghệ sĩ không hợp lệ") @Valid MovieCastRequest> casts) {
 }

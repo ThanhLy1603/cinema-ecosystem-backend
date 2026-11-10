@@ -37,6 +37,9 @@ public class Movie extends SoftDeleteEntity {
     @Column(name = "title", nullable = false, length = 255)
     private String title;
 
+    @Column(name = "slug", nullable = false, length = 255)
+    private String slug;
+
     @Column(name = "original_title", length = 255)
     private String originalTitle;
 

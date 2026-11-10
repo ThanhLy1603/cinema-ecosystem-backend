@@ -64,6 +64,9 @@ class MovieAdminServiceTest {
     @Mock
     private MovieUsageChecker movieUsageChecker;
 
+    @Mock
+    private MovieSlugResolver movieSlugResolver;
+
     private MovieAdminService movieAdminService;
     private Genre genre;
     private Person person;
@@ -77,6 +80,7 @@ class MovieAdminServiceTest {
                 personRepository,
                 movieViewAssembler,
                 movieUsageChecker,
+                movieSlugResolver,
                 Clock.fixed(NOW, ZoneOffset.UTC));
         genre = new Genre();
         genre.setId(1L);
@@ -88,8 +92,13 @@ class MovieAdminServiceTest {
     }
 
     private MovieRequest movieRequest(LocalDate endDate, List<Long> genreIds, List<MovieCastRequest> casts) {
+        return movieRequest("  Mai  ", null, endDate, genreIds, casts);
+    }
+
+    private MovieRequest movieRequest(
+            String title, String slug, LocalDate endDate, List<Long> genreIds, List<MovieCastRequest> casts) {
         return new MovieRequest(
-                "  Mai  ", " ", 131, LocalDate.of(2026, 2, 10), endDate, AgeRating.C16, null, "", null,
+                title, slug, " ", 131, LocalDate.of(2026, 2, 10), endDate, AgeRating.C16, null, "", null,
                 "Mô tả", MovieStatus.NOW_SHOWING, genreIds, casts);
     }
 
@@ -191,6 +200,109 @@ class MovieAdminServiceTest {
         assertEquals("Mai", movie.getTitle());
         assertTrue(movieDetailResponse.casts().isEmpty());
         verify(movieCastRepository).deleteAllByMovieId(MOVIE_ID);
+    }
+
+    @Test
+    void createStoresSlugFromResolver() {
+        stubSave();
+        when(movieSlugResolver.resolveForCreate("mai-2026", "Mai")).thenReturn("mai-2026");
+
+        MovieDetailResponse movieDetailResponse = movieAdminService.createMovie(
+                movieRequest("  Mai  ", "mai-2026", null, List.of(), List.of()));
+
+        assertEquals("mai-2026", movieDetailResponse.slug());
+    }
+
+    @Test
+    void createStopsWhenSlugIsAlreadyUsed() {
+        when(movieSlugResolver.resolveForCreate("mai", "Mai"))
+                .thenThrow(new AppException("Đường dẫn phim đã được dùng cho phim khác", HttpStatus.CONFLICT, "MOVIE_SLUG_EXISTS"));
+
+        AppException appException = assertThrows(AppException.class, () -> movieAdminService.createMovie(
+                movieRequest("Mai", "mai", null, List.of(), List.of())));
+
+        assertEquals("MOVIE_SLUG_EXISTS", appException.getErrorCode());
+        verify(movieRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void updateKeepsSlugWhenRequestLeavesItBlank() {
+        Movie movie = existingMovie(131, MovieStatus.NOW_SHOWING);
+        movie.setSlug("mai");
+        when(movieViewAssembler.loadMovieWithGenres(MOVIE_ID, false)).thenReturn(movie);
+        when(movieRepository.saveAndFlush(movie)).thenReturn(movie);
+        when(movieSlugResolver.resolveForUpdate(movie, null)).thenReturn("mai");
+
+        MovieDetailResponse movieDetailResponse =
+                movieAdminService.updateMovie(MOVIE_ID, movieRequest(null, List.of(), List.of()));
+
+        assertEquals("mai", movieDetailResponse.slug());
+    }
+
+    @Test
+    void updateRejectsDurationChangeWhileUpcomingShowtimesExist() {
+        Movie movie = existingMovie(120, MovieStatus.NOW_SHOWING);
+        when(movieViewAssembler.loadMovieWithGenres(MOVIE_ID, false)).thenReturn(movie);
+        when(movieUsageChecker.countUpcomingShowtimesByMovie(MOVIE_ID, NOW)).thenReturn(3L);
+
+        AppException appException = assertThrows(AppException.class,
+                () -> movieAdminService.updateMovie(MOVIE_ID, movieRequest(null, List.of(), List.of())));
+
+        assertEquals(HttpStatus.CONFLICT, appException.getStatus());
+        assertEquals("MOVIE_DURATION_LOCKED", appException.getErrorCode());
+        assertEquals(120, movie.getDurationMinutes());
+        verify(movieRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void updateRejectsEndingMovieWhileUpcomingShowtimesExist() {
+        Movie movie = existingMovie(131, MovieStatus.NOW_SHOWING);
+        when(movieViewAssembler.loadMovieWithGenres(MOVIE_ID, false)).thenReturn(movie);
+        when(movieUsageChecker.countUpcomingShowtimesByMovie(MOVIE_ID, NOW)).thenReturn(1L);
+        MovieRequest endedMovieRequest = new MovieRequest(
+                "Mai", null, null, 131, LocalDate.of(2026, 2, 10), null, AgeRating.C16, null, null, null, null,
+                MovieStatus.ENDED, List.of(), List.of());
+
+        AppException appException =
+                assertThrows(AppException.class, () -> movieAdminService.updateMovie(MOVIE_ID, endedMovieRequest));
+
+        assertEquals("MOVIE_HAS_UPCOMING_SHOWTIMES", appException.getErrorCode());
+        assertEquals(MovieStatus.NOW_SHOWING, movie.getStatus());
+    }
+
+    @Test
+    void updateSkipsShowtimeLookupWhenDurationAndStatusAreUnchanged() {
+        Movie movie = existingMovie(131, MovieStatus.NOW_SHOWING);
+        when(movieViewAssembler.loadMovieWithGenres(MOVIE_ID, false)).thenReturn(movie);
+        when(movieRepository.saveAndFlush(movie)).thenReturn(movie);
+
+        movieAdminService.updateMovie(MOVIE_ID, movieRequest(null, List.of(), List.of()));
+
+        verify(movieUsageChecker, never()).countUpcomingShowtimesByMovie(any(), any());
+    }
+
+    @Test
+    void updateAllowsEndingMovieWithoutUpcomingShowtimes() {
+        Movie movie = existingMovie(131, MovieStatus.NOW_SHOWING);
+        when(movieViewAssembler.loadMovieWithGenres(MOVIE_ID, false)).thenReturn(movie);
+        when(movieRepository.saveAndFlush(movie)).thenReturn(movie);
+        when(movieUsageChecker.countUpcomingShowtimesByMovie(MOVIE_ID, NOW)).thenReturn(0L);
+        MovieRequest endedMovieRequest = new MovieRequest(
+                "Mai", null, null, 131, LocalDate.of(2026, 2, 10), null, AgeRating.C16, null, null, null, null,
+                MovieStatus.ENDED, List.of(), List.of());
+
+        movieAdminService.updateMovie(MOVIE_ID, endedMovieRequest);
+
+        assertEquals(MovieStatus.ENDED, movie.getStatus());
+    }
+
+    private Movie existingMovie(int durationMinutes, MovieStatus movieStatus) {
+        Movie movie = new Movie();
+        movie.setId(MOVIE_ID);
+        movie.setDurationMinutes(durationMinutes);
+        movie.setStatus(movieStatus);
+        movie.setGenres(Set.of());
+        return movie;
     }
 
     @Test

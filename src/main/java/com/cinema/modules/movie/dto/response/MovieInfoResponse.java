@@ -6,6 +6,7 @@ import com.cinema.modules.movie.enums.MovieStatus;
 public record MovieInfoResponse(
         Long id,
         String title,
+        String slug,
         int durationMinutes,
         AgeRating rated,
         String posterUrl,
