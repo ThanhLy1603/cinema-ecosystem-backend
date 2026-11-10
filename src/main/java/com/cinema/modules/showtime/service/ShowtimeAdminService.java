@@ -4,22 +4,17 @@ import com.cinema.common.exception.AppException;
 import com.cinema.common.util.BusinessZone;
 import com.cinema.modules.auth.service.interfaces.IBranchAccessService;
 import com.cinema.modules.cinema.dto.response.HallInfoResponse;
-import com.cinema.modules.cinema.enums.HallStatus;
 import com.cinema.modules.cinema.service.interfaces.ICinemaQueryService;
 import com.cinema.modules.movie.dto.response.MovieInfoResponse;
-import com.cinema.modules.movie.enums.MovieStatus;
 import com.cinema.modules.movie.service.interfaces.IMovieQueryService;
 import com.cinema.modules.showtime.dto.request.ShowtimeRequest;
-import com.cinema.modules.showtime.dto.response.ShowtimeConflictResponse;
 import com.cinema.modules.showtime.dto.response.ShowtimeResponse;
 import com.cinema.modules.showtime.entity.Showtime;
+import com.cinema.modules.showtime.model.PlannedShowtimeSlot;
 import com.cinema.modules.showtime.enums.ShowtimeStatus;
-import com.cinema.modules.showtime.exception.ShowtimeConflictException;
 import com.cinema.modules.showtime.repository.ShowtimeRepository;
 import com.cinema.modules.showtime.service.interfaces.IShowtimeAdminService;
 import com.cinema.modules.showtime.specification.ShowtimeSpecifications;
-import com.cinema.modules.showtime.util.ShowtimeRules;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
@@ -28,7 +23,6 @@ import org.springframework.stereotype.Service;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Set;
 
@@ -38,7 +32,8 @@ public class ShowtimeAdminService implements IShowtimeAdminService {
     private static final Sort SHOWTIME_SORT = Sort.by("startTime", "id");
 
     private final ShowtimeRepository showtimeRepository;
-    private final ShowtimeConflictDetector showtimeConflictDetector;
+    private final ShowtimeSlotPlanner showtimeSlotPlanner;
+    private final ShowtimePersister showtimePersister;
     private final ShowtimeBookingChecker showtimeBookingChecker;
     private final ShowtimeViewAssembler showtimeViewAssembler;
     private final ICinemaQueryService cinemaQueryService;
@@ -48,7 +43,8 @@ public class ShowtimeAdminService implements IShowtimeAdminService {
 
     public ShowtimeAdminService(
             ShowtimeRepository showtimeRepository,
-            ShowtimeConflictDetector showtimeConflictDetector,
+            ShowtimeSlotPlanner showtimeSlotPlanner,
+            ShowtimePersister showtimePersister,
             ShowtimeBookingChecker showtimeBookingChecker,
             ShowtimeViewAssembler showtimeViewAssembler,
             ICinemaQueryService cinemaQueryService,
@@ -56,7 +52,8 @@ public class ShowtimeAdminService implements IShowtimeAdminService {
             IBranchAccessService branchAccessService,
             Clock clock) {
         this.showtimeRepository = showtimeRepository;
-        this.showtimeConflictDetector = showtimeConflictDetector;
+        this.showtimeSlotPlanner = showtimeSlotPlanner;
+        this.showtimePersister = showtimePersister;
         this.showtimeBookingChecker = showtimeBookingChecker;
         this.showtimeViewAssembler = showtimeViewAssembler;
         this.cinemaQueryService = cinemaQueryService;
@@ -94,10 +91,10 @@ public class ShowtimeAdminService implements IShowtimeAdminService {
     @Override
     public ShowtimeResponse createShowtime(Long actorUserId, ShowtimeRequest showtimeRequest) {
         Instant now = Instant.now(clock);
-        ShowtimeSlot showtimeSlot = prepareSlot(actorUserId, showtimeRequest, now, null);
+        PlannedShowtimeSlot showtimeSlot = planSlot(actorUserId, showtimeRequest, now, null);
         Showtime showtime = new Showtime();
         applySlot(showtime, showtimeRequest, showtimeSlot);
-        Showtime savedShowtime = saveWithoutOverlap(showtime, showtimeSlot, null);
+        Showtime savedShowtime = showtimePersister.saveWithoutOverlap(showtime, showtimeSlot, null);
         return showtimeViewAssembler.toShowtimeResponses(List.of(savedShowtime), now).get(0);
     }
 
@@ -111,9 +108,9 @@ public class ShowtimeAdminService implements IShowtimeAdminService {
             throw new AppException("Suất chiếu đã bắt đầu, không thể chỉnh sửa", HttpStatus.CONFLICT, "SHOWTIME_STARTED");
         }
         assertNoBookings(showtime, now, "Suất chiếu đã có vé hoặc ghế đang được giữ, không thể chỉnh sửa");
-        ShowtimeSlot showtimeSlot = prepareSlot(actorUserId, showtimeRequest, now, showtimeId);
+        PlannedShowtimeSlot showtimeSlot = planSlot(actorUserId, showtimeRequest, now, showtimeId);
         applySlot(showtime, showtimeRequest, showtimeSlot);
-        Showtime savedShowtime = saveWithoutOverlap(showtime, showtimeSlot, showtimeId);
+        Showtime savedShowtime = showtimePersister.saveWithoutOverlap(showtime, showtimeSlot, showtimeId);
         return showtimeViewAssembler.toShowtimeResponses(List.of(savedShowtime), now).get(0);
     }
 
@@ -137,64 +134,24 @@ public class ShowtimeAdminService implements IShowtimeAdminService {
         return movieQueryService.findSchedulableMovieInfos();
     }
 
-    private ShowtimeSlot prepareSlot(Long actorUserId, ShowtimeRequest showtimeRequest, Instant now, Long excludedShowtimeId) {
-        HallInfoResponse hallInfoResponse = cinemaQueryService
-                .findHallInfos(List.of(showtimeRequest.hallId()))
-                .get(showtimeRequest.hallId());
-        if (hallInfoResponse == null || hallInfoResponse.deleted()) {
-            throw new AppException("Không tìm thấy phòng chiếu", HttpStatus.NOT_FOUND, "HALL_NOT_FOUND");
-        }
-        branchAccessService.assertCanAccessCinema(actorUserId, hallInfoResponse.cinemaId());
-        if (cinemaQueryService.findActiveCinemaIds(List.of(hallInfoResponse.cinemaId())).isEmpty()) {
-            throw new AppException(
-                    "Cụm rạp đang ngừng hoạt động, không thể xếp lịch chiếu", HttpStatus.CONFLICT, "CINEMA_NOT_ACTIVE");
-        }
-        if (hallInfoResponse.status() != HallStatus.ACTIVE) {
-            throw new AppException(
-                    "Phòng chiếu đang bảo trì, không thể xếp lịch chiếu", HttpStatus.CONFLICT, "HALL_NOT_ACTIVE");
-        }
-        MovieInfoResponse movieInfoResponse = movieQueryService
-                .findMovieInfos(List.of(showtimeRequest.movieId()))
-                .get(showtimeRequest.movieId());
-        if (movieInfoResponse == null || movieInfoResponse.deleted()) {
-            throw new AppException("Không tìm thấy phim", HttpStatus.NOT_FOUND, "MOVIE_NOT_FOUND");
-        }
-        if (movieInfoResponse.status() == MovieStatus.ENDED) {
-            throw new AppException("Phim đã ngừng chiếu, không thể xếp lịch chiếu", HttpStatus.CONFLICT, "MOVIE_ENDED");
-        }
-        Instant startTime = showtimeRequest.startTime().truncatedTo(ChronoUnit.MINUTES);
-        if (!startTime.isAfter(now)) {
-            throw new AppException(
-                    "Giờ bắt đầu phải nằm trong tương lai", HttpStatus.BAD_REQUEST, "SHOWTIME_START_IN_PAST");
-        }
-        Instant endTime = ShowtimeRules.calculateEndTime(startTime, movieInfoResponse.durationMinutes());
-        List<ShowtimeConflictResponse> conflicts =
-                showtimeConflictDetector.findConflicts(hallInfoResponse.id(), startTime, endTime, excludedShowtimeId);
-        if (!conflicts.isEmpty()) {
-            throw new ShowtimeConflictException(conflicts);
-        }
-        return new ShowtimeSlot(startTime, endTime);
+    private PlannedShowtimeSlot planSlot(
+            Long actorUserId, ShowtimeRequest showtimeRequest, Instant now, Long excludedShowtimeId) {
+        return showtimeSlotPlanner.plan(
+                actorUserId,
+                showtimeRequest.movieId(),
+                showtimeRequest.hallId(),
+                showtimeRequest.startTime(),
+                now,
+                excludedShowtimeId);
     }
 
-    private void applySlot(Showtime showtime, ShowtimeRequest showtimeRequest, ShowtimeSlot showtimeSlot) {
+    private void applySlot(Showtime showtime, ShowtimeRequest showtimeRequest, PlannedShowtimeSlot showtimeSlot) {
         showtime.setMovieId(showtimeRequest.movieId());
         showtime.setHallId(showtimeRequest.hallId());
         showtime.setStartTime(showtimeSlot.startTime());
         showtime.setEndTime(showtimeSlot.endTime());
         showtime.setBasePrice(showtimeRequest.basePrice());
         showtime.setStatus(ShowtimeStatus.ACTIVE);
-    }
-
-    private Showtime saveWithoutOverlap(Showtime showtime, ShowtimeSlot showtimeSlot, Long excludedShowtimeId) {
-        try {
-            return showtimeRepository.saveAndFlush(showtime);
-        } catch (DataIntegrityViolationException dataIntegrityViolationException) {
-            if (!showtimeConflictDetector.isOverlapViolation(dataIntegrityViolationException)) {
-                throw dataIntegrityViolationException;
-            }
-            throw new ShowtimeConflictException(showtimeConflictDetector.findConflicts(
-                    showtime.getHallId(), showtimeSlot.startTime(), showtimeSlot.endTime(), excludedShowtimeId));
-        }
     }
 
     private Showtime loadShowtime(Long showtimeId) {
@@ -218,8 +175,5 @@ public class ShowtimeAdminService implements IShowtimeAdminService {
         if (!showtimeBookingChecker.findShowtimeIdsWithBookings(List.of(showtime.getId()), now).isEmpty()) {
             throw new AppException(message, HttpStatus.CONFLICT, "SHOWTIME_HAS_BOOKINGS");
         }
-    }
-
-    private record ShowtimeSlot(Instant startTime, Instant endTime) {
     }
 }

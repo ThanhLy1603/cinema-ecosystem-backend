@@ -3,10 +3,14 @@ package com.cinema.modules.showtime.controller;
 import com.cinema.common.response.ApiResponse;
 import com.cinema.modules.auth.security.AuthenticatedUser;
 import com.cinema.modules.movie.dto.response.MovieInfoResponse;
+import com.cinema.modules.showtime.dto.request.ShowtimeDayCopyRequest;
+import com.cinema.modules.showtime.dto.request.ShowtimeDuplicateRequest;
 import com.cinema.modules.showtime.dto.request.ShowtimeRequest;
+import com.cinema.modules.showtime.dto.response.BulkShowtimeResponse;
 import com.cinema.modules.showtime.dto.response.ShowtimeResponse;
 import com.cinema.modules.showtime.enums.ShowtimeStatus;
 import com.cinema.modules.showtime.service.interfaces.IShowtimeAdminService;
+import com.cinema.modules.showtime.service.interfaces.IShowtimeBulkService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -31,9 +35,12 @@ import java.util.List;
 public class AdminShowtimeController {
 
     private final IShowtimeAdminService showtimeAdminService;
+    private final IShowtimeBulkService showtimeBulkService;
 
-    public AdminShowtimeController(IShowtimeAdminService showtimeAdminService) {
+    public AdminShowtimeController(
+            IShowtimeAdminService showtimeAdminService, IShowtimeBulkService showtimeBulkService) {
         this.showtimeAdminService = showtimeAdminService;
+        this.showtimeBulkService = showtimeBulkService;
     }
 
     @GetMapping
@@ -83,5 +90,21 @@ public class AdminShowtimeController {
             @AuthenticationPrincipal AuthenticatedUser authenticatedUser, @PathVariable Long showtimeId) {
         return ResponseEntity.ok(ApiResponse.success(
                 "Hủy suất chiếu thành công", showtimeAdminService.cancelShowtime(authenticatedUser.userId(), showtimeId)));
+    }
+
+    @PostMapping("/duplicate")
+    public ResponseEntity<ApiResponse<BulkShowtimeResponse>> duplicateShowtime(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+            @Valid @RequestBody ShowtimeDuplicateRequest showtimeDuplicateRequest) {
+        return ResponseEntity.ok(ApiResponse.success(
+                showtimeBulkService.duplicateShowtime(authenticatedUser.userId(), showtimeDuplicateRequest)));
+    }
+
+    @PostMapping("/copy-day")
+    public ResponseEntity<ApiResponse<BulkShowtimeResponse>> copyDay(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+            @Valid @RequestBody ShowtimeDayCopyRequest showtimeDayCopyRequest) {
+        return ResponseEntity.ok(ApiResponse.success(
+                showtimeBulkService.copyDay(authenticatedUser.userId(), showtimeDayCopyRequest)));
     }
 }

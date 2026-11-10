@@ -91,7 +91,8 @@ class ShowtimeAdminServiceTest {
     void setUp() {
         showtimeAdminService = new ShowtimeAdminService(
                 showtimeRepository,
-                showtimeConflictDetector,
+                new ShowtimeSlotPlanner(cinemaQueryService, movieQueryService, branchAccessService, showtimeConflictDetector),
+                new ShowtimePersister(showtimeRepository, showtimeConflictDetector),
                 showtimeBookingChecker,
                 showtimeViewAssembler,
                 cinemaQueryService,
