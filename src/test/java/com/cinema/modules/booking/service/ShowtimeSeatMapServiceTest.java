@@ -1,6 +1,7 @@
 package com.cinema.modules.booking.service;
 
 import com.cinema.common.exception.AppException;
+import com.cinema.config.properties.BookingPolicyProperties;
 import com.cinema.modules.booking.dto.response.ShowtimeSeatMapResponse;
 import com.cinema.modules.booking.dto.response.ShowtimeSeatResponse;
 import com.cinema.modules.booking.enums.SeatAvailability;
@@ -76,6 +77,7 @@ class ShowtimeSeatMapServiceTest {
                 movieQueryService,
                 dynamicPricingService,
                 seatOccupancyReader,
+                new BookingPolicyProperties(30),
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -99,13 +101,31 @@ class ShowtimeSeatMapServiceTest {
     }
 
     @Test
-    void startedShowtimeIsRejectedWithConflict() {
+    void showtimeStartedMoreThanThirtyMinutesAgoIsRejectedWithConflict() {
         when(showtimeQueryService.findShowtimeInfo(SHOWTIME_ID))
-                .thenReturn(Optional.of(showtimeInfo(ShowtimeStatus.ACTIVE, NOW.minusSeconds(60))));
+                .thenReturn(Optional.of(showtimeInfo(ShowtimeStatus.ACTIVE, NOW.minusSeconds(31 * 60))));
 
         AppException appException = assertThrows(AppException.class, () -> showtimeSeatMapService.getSeatMap(SHOWTIME_ID));
 
         assertEquals("SHOWTIME_STARTED", appException.getErrorCode());
+    }
+
+    @Test
+    void showtimeThatStartedTenMinutesAgoStillLoadsItsSeatMap() {
+        when(showtimeQueryService.findShowtimeInfo(SHOWTIME_ID))
+                .thenReturn(Optional.of(showtimeInfo(ShowtimeStatus.ACTIVE, NOW.minusSeconds(600))));
+        when(cinemaPublicService.findPublicSeatLayout(HALL_ID)).thenReturn(new SeatLayoutResponse(
+                HALL_ID, 1L, "Phòng 1", ScreenType.SCREEN_2D, HallStatus.ACTIVE, 3L, List.of(), 0, List.of()));
+        when(movieQueryService.findMovieInfos(List.of(7L))).thenReturn(Map.of(7L, new MovieInfoResponse(
+                7L, "Phim", "phim", 120, AgeRating.C13, null, MovieStatus.NOW_SHOWING, false)));
+        when(cinemaQueryService.findCinemaNames(List.of(1L))).thenReturn(Map.of(1L, "Rạp A"));
+        when(dynamicPricingService.getShowtimePrices(SHOWTIME_ID)).thenReturn(new ShowtimePriceResponse(
+                SHOWTIME_ID, ScreenType.SCREEN_2D, NOW, new BigDecimal("90000"),
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, List.of(), List.of()));
+
+        ShowtimeSeatMapResponse showtimeSeatMapResponse = showtimeSeatMapService.getSeatMap(SHOWTIME_ID);
+
+        assertEquals(SHOWTIME_ID, showtimeSeatMapResponse.showtimeId());
     }
 
     @Test

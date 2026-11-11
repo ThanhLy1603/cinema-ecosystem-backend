@@ -32,11 +32,14 @@ class PersonAdminServiceTest {
     @Mock
     private MovieCastRepository movieCastRepository;
 
+    @Mock
+    private PublicMovieCache publicMovieCache;
+
     private PersonAdminService personAdminService;
 
     @BeforeEach
     void setUp() {
-        personAdminService = new PersonAdminService(personRepository, movieCastRepository);
+        personAdminService = new PersonAdminService(personRepository, movieCastRepository, publicMovieCache);
     }
 
     @Test
@@ -49,6 +52,7 @@ class PersonAdminServiceTest {
         assertEquals("Ngô Thanh Vân", personResponse.name());
         assertNull(personResponse.avatarUrl());
         assertNull(personResponse.bio());
+        org.mockito.Mockito.verify(publicMovieCache).evictAfterCommit();
     }
 
     @Test

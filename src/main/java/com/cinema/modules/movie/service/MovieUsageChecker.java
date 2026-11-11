@@ -24,4 +24,21 @@ public class MovieUsageChecker {
                 Long.class);
         return showtimeCount == null ? 0 : showtimeCount;
     }
+
+    public long countShowtimesWithBookingsByMovie(Long movieId, Instant now) {
+        Long showtimeCount = namedParameterJdbcTemplate.queryForObject(
+                "select count(distinct booked_showtime.showtime_id) from ("
+                        + "select seat_reservation.showtime_id from seat_reservations seat_reservation "
+                        + "join showtimes showtime on showtime.id = seat_reservation.showtime_id "
+                        + "where showtime.movie_id = :movieId "
+                        + "and not (seat_reservation.status = 'HELD' and seat_reservation.expires_at < :now) "
+                        + "union all "
+                        + "select ticket.showtime_id from tickets ticket "
+                        + "join showtimes showtime on showtime.id = ticket.showtime_id "
+                        + "where showtime.movie_id = :movieId"
+                        + ") booked_showtime",
+                new MapSqlParameterSource("movieId", movieId).addValue("now", Timestamp.from(now)),
+                Long.class);
+        return showtimeCount == null ? 0 : showtimeCount;
+    }
 }

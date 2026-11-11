@@ -44,6 +44,7 @@ public class MovieAdminService implements IMovieAdminService {
     private final MovieViewAssembler movieViewAssembler;
     private final MovieUsageChecker movieUsageChecker;
     private final MovieSlugResolver movieSlugResolver;
+    private final PublicMovieCache publicMovieCache;
     private final Clock clock;
 
     public MovieAdminService(
@@ -54,6 +55,7 @@ public class MovieAdminService implements IMovieAdminService {
             MovieViewAssembler movieViewAssembler,
             MovieUsageChecker movieUsageChecker,
             MovieSlugResolver movieSlugResolver,
+            PublicMovieCache publicMovieCache,
             Clock clock) {
         this.movieRepository = movieRepository;
         this.movieCastRepository = movieCastRepository;
@@ -62,6 +64,7 @@ public class MovieAdminService implements IMovieAdminService {
         this.movieViewAssembler = movieViewAssembler;
         this.movieUsageChecker = movieUsageChecker;
         this.movieSlugResolver = movieSlugResolver;
+        this.publicMovieCache = publicMovieCache;
         this.clock = clock;
     }
 
@@ -109,6 +112,12 @@ public class MovieAdminService implements IMovieAdminService {
     public void deleteMovie(Long movieId) {
         Movie movie = movieViewAssembler.loadMovieWithGenres(movieId, false);
         Instant now = Instant.now(clock);
+        if (movieUsageChecker.countShowtimesWithBookingsByMovie(movieId, now) > 0) {
+            throw new AppException(
+                    "Phim đã có khách đặt vé nên không thể xóa. Khi các suất chiếu đã diễn ra, hãy chuyển phim sang trạng thái ngừng chiếu",
+                    HttpStatus.CONFLICT,
+                    "MOVIE_HAS_BOOKINGS");
+        }
         if (movieUsageChecker.countUpcomingShowtimesByMovie(movieId, now) > 0) {
             throw new AppException(
                     "Phim còn suất chiếu chưa diễn ra, hãy hủy các suất chiếu trước khi xóa phim",
@@ -117,6 +126,7 @@ public class MovieAdminService implements IMovieAdminService {
         }
         movie.markDeleted(now);
         movieRepository.save(movie);
+        publicMovieCache.evictAfterCommit();
     }
 
     @Transactional
@@ -217,6 +227,7 @@ public class MovieAdminService implements IMovieAdminService {
     }
 
     private Movie saveMovie(Movie movie) {
+        publicMovieCache.evictAfterCommit();
         try {
             return movieRepository.saveAndFlush(movie);
         } catch (DataIntegrityViolationException dataIntegrityViolationException) {

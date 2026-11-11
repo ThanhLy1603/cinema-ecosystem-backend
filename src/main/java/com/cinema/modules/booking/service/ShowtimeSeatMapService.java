@@ -1,6 +1,8 @@
 package com.cinema.modules.booking.service;
 
 import com.cinema.common.exception.AppException;
+import com.cinema.common.util.BookingWindow;
+import com.cinema.config.properties.BookingPolicyProperties;
 import com.cinema.modules.booking.dto.response.ShowtimeSeatMapResponse;
 import com.cinema.modules.booking.dto.response.ShowtimeSeatResponse;
 import com.cinema.modules.booking.enums.SeatAvailability;
@@ -38,6 +40,7 @@ public class ShowtimeSeatMapService implements IShowtimeSeatMapService {
     private final IMovieQueryService movieQueryService;
     private final IDynamicPricingService dynamicPricingService;
     private final SeatOccupancyReader seatOccupancyReader;
+    private final BookingPolicyProperties bookingPolicyProperties;
     private final Clock clock;
 
     public ShowtimeSeatMapService(
@@ -47,6 +50,7 @@ public class ShowtimeSeatMapService implements IShowtimeSeatMapService {
             IMovieQueryService movieQueryService,
             IDynamicPricingService dynamicPricingService,
             SeatOccupancyReader seatOccupancyReader,
+            BookingPolicyProperties bookingPolicyProperties,
             Clock clock) {
         this.showtimeQueryService = showtimeQueryService;
         this.cinemaPublicService = cinemaPublicService;
@@ -54,6 +58,7 @@ public class ShowtimeSeatMapService implements IShowtimeSeatMapService {
         this.movieQueryService = movieQueryService;
         this.dynamicPricingService = dynamicPricingService;
         this.seatOccupancyReader = seatOccupancyReader;
+        this.bookingPolicyProperties = bookingPolicyProperties;
         this.clock = clock;
     }
 
@@ -63,8 +68,8 @@ public class ShowtimeSeatMapService implements IShowtimeSeatMapService {
         ShowtimeInfoResponse showtimeInfoResponse = showtimeQueryService.findShowtimeInfo(showtimeId)
                 .filter(foundShowtimeInfo -> foundShowtimeInfo.status() == ShowtimeStatus.ACTIVE)
                 .orElseThrow(() -> new AppException("Không tìm thấy suất chiếu", HttpStatus.NOT_FOUND, "SHOWTIME_NOT_FOUND"));
-        if (!showtimeInfoResponse.startTime().isAfter(now)) {
-            throw new AppException("Suất chiếu đã bắt đầu", HttpStatus.CONFLICT, "SHOWTIME_STARTED");
+        if (!BookingWindow.isOpen(showtimeInfoResponse.startTime(), now, bookingPolicyProperties.lateBookingWindow())) {
+            throw new AppException("Đã hết thời gian đặt vé cho suất chiếu này", HttpStatus.CONFLICT, "SHOWTIME_STARTED");
         }
         SeatLayoutResponse seatLayoutResponse = cinemaPublicService.findPublicSeatLayout(showtimeInfoResponse.hallId());
         MovieInfoResponse movieInfoResponse = movieQueryService

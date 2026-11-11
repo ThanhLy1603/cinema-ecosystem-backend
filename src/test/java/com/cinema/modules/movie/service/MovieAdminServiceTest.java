@@ -32,6 +32,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -67,6 +68,9 @@ class MovieAdminServiceTest {
     @Mock
     private MovieSlugResolver movieSlugResolver;
 
+    @Mock
+    private PublicMovieCache publicMovieCache;
+
     private MovieAdminService movieAdminService;
     private Genre genre;
     private Person person;
@@ -81,6 +85,7 @@ class MovieAdminServiceTest {
                 movieViewAssembler,
                 movieUsageChecker,
                 movieSlugResolver,
+                publicMovieCache,
                 Clock.fixed(NOW, ZoneOffset.UTC));
         genre = new Genre();
         genre.setId(1L);
@@ -128,6 +133,17 @@ class MovieAdminServiceTest {
         assertEquals("Trấn Thành", movieDetailResponse.casts().get(0).personName());
         assertEquals("Mai", movieDetailResponse.casts().get(0).characterName());
         verify(movieCastRepository).deleteAllByMovieId(MOVIE_ID);
+    }
+
+    @Test
+    void failedValidationDoesNotTouchThePublicCache() {
+        AppException appException = assertThrows(
+                AppException.class,
+                () -> movieAdminService.createMovie(
+                        movieRequest(LocalDate.of(2020, 1, 1), List.of(1L), List.of())));
+
+        assertNotNull(appException);
+        verify(publicMovieCache, org.mockito.Mockito.never()).evictAfterCommit();
     }
 
     @Test
@@ -320,6 +336,20 @@ class MovieAdminServiceTest {
     }
 
     @Test
+    void deleteIsBlockedOnceCustomersHaveBookedAnyShowtimeOfTheMovie() {
+        Movie movie = new Movie();
+        when(movieViewAssembler.loadMovieWithGenres(MOVIE_ID, false)).thenReturn(movie);
+        when(movieUsageChecker.countShowtimesWithBookingsByMovie(MOVIE_ID, NOW)).thenReturn(3L);
+
+        AppException appException = assertThrows(AppException.class, () -> movieAdminService.deleteMovie(MOVIE_ID));
+
+        assertEquals("MOVIE_HAS_BOOKINGS", appException.getErrorCode());
+        assertFalse(movie.isDeleted());
+        verify(movieRepository, org.mockito.Mockito.never()).save(any(Movie.class));
+        verify(publicMovieCache, org.mockito.Mockito.never()).evictAfterCommit();
+    }
+
+    @Test
     void deleteMarksMovieAsSoftDeleted() {
         Movie movie = new Movie();
         when(movieViewAssembler.loadMovieWithGenres(MOVIE_ID, false)).thenReturn(movie);
@@ -330,6 +360,7 @@ class MovieAdminServiceTest {
         assertTrue(movie.isDeleted());
         assertEquals(NOW, movie.getDeletedAt());
         verify(movieRepository).save(movie);
+        verify(publicMovieCache).evictAfterCommit();
     }
 
     @Test
@@ -347,6 +378,7 @@ class MovieAdminServiceTest {
         assertFalse(movie.isDeleted());
         assertEquals("mai-2", movie.getSlug());
         verify(movieRepository).saveAndFlush(movie);
+        verify(publicMovieCache).evictAfterCommit();
         verify(movieViewAssembler).getMovieDetail(MOVIE_ID);
     }
 

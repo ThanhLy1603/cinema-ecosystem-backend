@@ -1,6 +1,6 @@
 package com.cinema.modules.auth.security;
 
-import com.cinema.config.JwtProperties;
+import com.cinema.config.properties.JwtProperties;
 import com.cinema.modules.auth.entity.Role;
 import com.cinema.modules.auth.entity.User;
 import jakarta.servlet.http.Cookie;

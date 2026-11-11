@@ -1,6 +1,8 @@
 package com.cinema.modules.booking.service;
 
 import com.cinema.common.exception.AppException;
+import com.cinema.common.util.BookingWindow;
+import com.cinema.config.properties.BookingPolicyProperties;
 import com.cinema.modules.booking.BookingRules;
 import com.cinema.modules.booking.dto.message.SeatStateChange;
 import com.cinema.modules.booking.dto.response.HeldSeatResponse;
@@ -58,6 +60,7 @@ public class SeatHoldService implements ISeatHoldService {
     private final ISeatStatusBroadcaster seatStatusBroadcaster;
     private final RedissonClient redissonClient;
     private final TransactionTemplate transactionTemplate;
+    private final BookingPolicyProperties bookingPolicyProperties;
     private final Clock clock;
 
     public SeatHoldService(
@@ -69,6 +72,7 @@ public class SeatHoldService implements ISeatHoldService {
             ISeatStatusBroadcaster seatStatusBroadcaster,
             RedissonClient redissonClient,
             TransactionTemplate transactionTemplate,
+            BookingPolicyProperties bookingPolicyProperties,
             Clock clock) {
         this.bookingRepository = bookingRepository;
         this.seatReservationRepository = seatReservationRepository;
@@ -78,6 +82,7 @@ public class SeatHoldService implements ISeatHoldService {
         this.seatStatusBroadcaster = seatStatusBroadcaster;
         this.redissonClient = redissonClient;
         this.transactionTemplate = transactionTemplate;
+        this.bookingPolicyProperties = bookingPolicyProperties;
         this.clock = clock;
     }
 
@@ -127,7 +132,9 @@ public class SeatHoldService implements ISeatHoldService {
         seatReservationRepository.deleteExpiredHold(showtimeId, seatId, SeatReservationStatus.HELD, now);
         SeatReservation existingSeatReservation =
                 seatReservationRepository.findByShowtimeIdAndSeatId(showtimeId, seatId).orElse(null);
-        Booking booking = findOrCreateBooking(userId, showtimeId, cinemaId, now);
+        Instant bookingCutoff = BookingWindow.lastBookableMoment(
+                showtimeInfoResponse.startTime(), bookingPolicyProperties.lateBookingWindow());
+        Booking booking = findOrCreateBooking(userId, showtimeId, cinemaId, now, bookingCutoff);
         if (existingSeatReservation != null) {
             if (existingSeatReservation.getUserId().equals(userId)
                     && booking.getId().equals(existingSeatReservation.getBookingId())) {
@@ -188,7 +195,8 @@ public class SeatHoldService implements ISeatHoldService {
                 .orElseGet(() -> emptyHold(showtimeId, now));
     }
 
-    private Booking findOrCreateBooking(Long userId, Long showtimeId, Long cinemaId, Instant now) {
+    private Booking findOrCreateBooking(
+            Long userId, Long showtimeId, Long cinemaId, Instant now, Instant bookingCutoff) {
         Booking pendingBooking =
                 bookingRepository.findFirstByUserIdAndStatus(userId, BookingStatus.PENDING).orElse(null);
         if (pendingBooking != null && !pendingBooking.getExpiresAt().isAfter(now)) {
@@ -210,7 +218,8 @@ public class SeatHoldService implements ISeatHoldService {
         booking.setCinemaId(cinemaId);
         booking.setShowtimeId(showtimeId);
         booking.setStatus(BookingStatus.PENDING);
-        booking.setExpiresAt(now.plus(BookingRules.SEAT_HOLD_DURATION));
+        Instant holdExpiry = now.plus(BookingRules.SEAT_HOLD_DURATION);
+        booking.setExpiresAt(holdExpiry.isAfter(bookingCutoff) ? bookingCutoff : holdExpiry);
         return bookingRepository.saveAndFlush(booking);
     }
 
@@ -270,8 +279,8 @@ public class SeatHoldService implements ISeatHoldService {
         ShowtimeInfoResponse showtimeInfoResponse = showtimeQueryService.findShowtimeInfo(showtimeId)
                 .filter(foundShowtimeInfo -> foundShowtimeInfo.status() == ShowtimeStatus.ACTIVE)
                 .orElseThrow(() -> new AppException("Không tìm thấy suất chiếu", HttpStatus.NOT_FOUND, "SHOWTIME_NOT_FOUND"));
-        if (!showtimeInfoResponse.startTime().isAfter(now)) {
-            throw new AppException("Suất chiếu đã bắt đầu", HttpStatus.CONFLICT, "SHOWTIME_STARTED");
+        if (!BookingWindow.isOpen(showtimeInfoResponse.startTime(), now, bookingPolicyProperties.lateBookingWindow())) {
+            throw new AppException("Đã hết thời gian đặt vé cho suất chiếu này", HttpStatus.CONFLICT, "SHOWTIME_STARTED");
         }
         return showtimeInfoResponse;
     }

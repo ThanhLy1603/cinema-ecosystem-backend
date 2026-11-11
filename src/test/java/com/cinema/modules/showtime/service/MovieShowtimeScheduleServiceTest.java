@@ -1,6 +1,7 @@
 package com.cinema.modules.showtime.service;
 
 import com.cinema.common.exception.AppException;
+import com.cinema.config.properties.BookingPolicyProperties;
 import com.cinema.modules.cinema.dto.response.CinemaOptionResponse;
 import com.cinema.modules.cinema.dto.response.HallInfoResponse;
 import com.cinema.modules.cinema.enums.HallStatus;
@@ -69,6 +70,7 @@ class MovieShowtimeScheduleServiceTest {
                 showtimeSeatOccupancyReader,
                 cinemaQueryService,
                 movieQueryService,
+                new BookingPolicyProperties(30),
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -159,6 +161,28 @@ class MovieShowtimeScheduleServiceTest {
         assertEquals("Rạp B", cinemaShowtimesResponses.get(1).cinemaName());
         assertEquals(0, cinemaShowtimesResponses.get(1).showtimes().get(0).availableSeats());
         assertTrue(cinemaShowtimesResponses.get(1).showtimes().get(0).soldOut());
+    }
+
+    @Test
+    void showtimeThatStartedMinutesAgoIsFlaggedAsStartedButStillListed() {
+        when(movieQueryService.findMovieInfos(List.of(MOVIE_ID))).thenReturn(Map.of(MOVIE_ID, movieInfo(false)));
+        when(cinemaQueryService.findActiveCinemaOptions()).thenReturn(List.of(cinemaOption(1L, "Rạp A")));
+        when(cinemaQueryService.findHallIdsByCinemaIds(Set.of(1L))).thenReturn(Set.of(10L));
+        when(cinemaQueryService.findHallInfos(Set.of(10L)))
+                .thenReturn(Map.of(10L, hallInfo(10L, 1L, HallStatus.ACTIVE, false)));
+        Showtime startedShowtime = showtime(100L, NOW.minusSeconds(600), 10L);
+        Showtime upcomingShowtime = showtime(101L, NOW.plusSeconds(3600), 10L);
+        when(showtimeRepository.findAll(any(Specification.class), any(Sort.class)))
+                .thenReturn(List.of(startedShowtime, upcomingShowtime));
+        when(cinemaQueryService.countBookableSeatsByHall(Set.of(10L))).thenReturn(Map.of(10L, 100));
+        when(showtimeSeatOccupancyReader.countOccupiedSeatsByShowtime(anyCollection(), any(Instant.class)))
+                .thenReturn(Map.of());
+
+        List<CinemaShowtimesResponse> cinemaShowtimesResponses =
+                movieShowtimeScheduleService.findShowtimesByDate(MOVIE_ID, LocalDate.of(2026, 11, 10), null);
+
+        assertTrue(cinemaShowtimesResponses.get(0).showtimes().get(0).started());
+        assertFalse(cinemaShowtimesResponses.get(0).showtimes().get(1).started());
     }
 
     @Test

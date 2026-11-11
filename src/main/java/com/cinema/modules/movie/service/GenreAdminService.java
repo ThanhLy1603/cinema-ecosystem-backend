@@ -21,9 +21,11 @@ public class GenreAdminService implements IGenreAdminService {
     private static final int MAX_SLUG_ATTEMPTS = 50;
 
     private final GenreRepository genreRepository;
+    private final PublicMovieCache publicMovieCache;
 
-    public GenreAdminService(GenreRepository genreRepository) {
+    public GenreAdminService(GenreRepository genreRepository, PublicMovieCache publicMovieCache) {
         this.genreRepository = genreRepository;
+        this.publicMovieCache = publicMovieCache;
     }
 
     @Transactional(readOnly = true)
@@ -71,6 +73,7 @@ public class GenreAdminService implements IGenreAdminService {
                     "GENRE_IN_USE");
         }
         genreRepository.delete(genre);
+        publicMovieCache.evictAfterCommit();
     }
 
     private Genre loadGenre(Long genreId) {
@@ -80,7 +83,9 @@ public class GenreAdminService implements IGenreAdminService {
 
     private GenreResponse saveGenre(Genre genre) {
         try {
-            return MovieMapper.toGenreResponse(genreRepository.saveAndFlush(genre));
+            GenreResponse genreResponse = MovieMapper.toGenreResponse(genreRepository.saveAndFlush(genre));
+            publicMovieCache.evictAfterCommit();
+            return genreResponse;
         } catch (DataIntegrityViolationException dataIntegrityViolationException) {
             throw nameAlreadyUsed();
         }

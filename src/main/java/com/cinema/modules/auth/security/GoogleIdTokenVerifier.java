@@ -1,7 +1,7 @@
 package com.cinema.modules.auth.security;
 
 import com.cinema.common.exception.AppException;
-import com.cinema.config.GoogleProperties;
+import com.cinema.config.properties.GoogleProperties;
 import com.cinema.modules.auth.model.GoogleProfile;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;

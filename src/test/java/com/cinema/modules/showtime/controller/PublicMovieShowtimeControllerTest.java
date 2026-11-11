@@ -58,7 +58,7 @@ class PublicMovieShowtimeControllerTest {
     void showtimesEndpointReturnsCinemaGroupsWithSeatAvailability() throws Exception {
         BookableShowtimeResponse bookableShowtimeResponse = new BookableShowtimeResponse(
                 100L, 10L, "Phòng 1", ScreenType.SCREEN_2D, Instant.parse("2026-11-12T11:00:00Z"),
-                Instant.parse("2026-11-12T13:00:00Z"), new BigDecimal("90000"), 100, 0, true);
+                Instant.parse("2026-11-12T13:00:00Z"), new BigDecimal("90000"), 100, 0, true, false);
         when(movieShowtimeScheduleService.findShowtimesByDate(7L, LocalDate.of(2026, 11, 12), 1L))
                 .thenReturn(List.of(new CinemaShowtimesResponse(1L, "Rạp A", List.of(bookableShowtimeResponse))));
 

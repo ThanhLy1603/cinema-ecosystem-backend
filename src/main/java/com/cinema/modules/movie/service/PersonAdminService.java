@@ -29,10 +29,15 @@ public class PersonAdminService implements IPersonAdminService {
 
     private final PersonRepository personRepository;
     private final MovieCastRepository movieCastRepository;
+    private final PublicMovieCache publicMovieCache;
 
-    public PersonAdminService(PersonRepository personRepository, MovieCastRepository movieCastRepository) {
+    public PersonAdminService(
+            PersonRepository personRepository,
+            MovieCastRepository movieCastRepository,
+            PublicMovieCache publicMovieCache) {
         this.personRepository = personRepository;
         this.movieCastRepository = movieCastRepository;
+        this.publicMovieCache = publicMovieCache;
     }
 
     @Transactional(readOnly = true)
@@ -60,7 +65,9 @@ public class PersonAdminService implements IPersonAdminService {
     public PersonResponse createPerson(PersonRequest personRequest) {
         Person person = new Person();
         applyRequest(person, personRequest);
-        return MovieMapper.toPersonResponse(personRepository.save(person));
+        PersonResponse personResponse = MovieMapper.toPersonResponse(personRepository.save(person));
+        publicMovieCache.evictAfterCommit();
+        return personResponse;
     }
 
     @Transactional
@@ -68,7 +75,9 @@ public class PersonAdminService implements IPersonAdminService {
     public PersonResponse updatePerson(Long personId, PersonRequest personRequest) {
         Person person = loadPerson(personId);
         applyRequest(person, personRequest);
-        return MovieMapper.toPersonResponse(personRepository.save(person));
+        PersonResponse personResponse = MovieMapper.toPersonResponse(personRepository.save(person));
+        publicMovieCache.evictAfterCommit();
+        return personResponse;
     }
 
     @Transactional
@@ -80,6 +89,7 @@ public class PersonAdminService implements IPersonAdminService {
                     "Nghệ sĩ đang tham gia phim, hãy gỡ khỏi các phim trước khi xóa", HttpStatus.CONFLICT, "PERSON_IN_USE");
         }
         personRepository.delete(person);
+        publicMovieCache.evictAfterCommit();
     }
 
     private Person loadPerson(Long personId) {

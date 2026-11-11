@@ -1,4 +1,4 @@
-package com.cinema.config;
+package com.cinema.config.websocket;
 
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;

@@ -1,8 +1,8 @@
 package com.cinema.modules.booking.service;
 
 import com.cinema.config.ClockConfig;
-import com.cinema.config.WebSocketConfig;
-import com.cinema.config.WebSocketDestinationGuard;
+import com.cinema.config.websocket.WebSocketConfig;
+import com.cinema.config.websocket.WebSocketDestinationGuard;
 import com.cinema.modules.booking.dto.message.SeatStateChange;
 import com.cinema.modules.booking.enums.SeatAvailability;
 import org.junit.jupiter.api.AfterEach;

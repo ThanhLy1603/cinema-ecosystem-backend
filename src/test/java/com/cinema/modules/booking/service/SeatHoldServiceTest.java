@@ -1,6 +1,7 @@
 package com.cinema.modules.booking.service;
 
 import com.cinema.common.exception.AppException;
+import com.cinema.config.properties.BookingPolicyProperties;
 import com.cinema.modules.booking.dto.message.SeatStateChange;
 import com.cinema.modules.booking.dto.response.SeatHoldResponse;
 import com.cinema.modules.booking.entity.Booking;
@@ -112,6 +113,7 @@ class SeatHoldServiceTest {
                 seatStatusBroadcaster,
                 redissonClient,
                 new TransactionTemplate(platformTransactionManager),
+                new BookingPolicyProperties(30),
                 Clock.fixed(NOW, ZoneOffset.UTC));
         lenient().when(platformTransactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         lenient().when(redissonClient.getLock(any(String.class))).thenReturn(rLock);
@@ -177,6 +179,40 @@ class SeatHoldServiceTest {
         TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
         verify(seatStatusBroadcaster).broadcast(SHOWTIME_ID, List.of(new SeatStateChange(11L, SeatAvailability.HELD)));
         verify(rLock).unlock();
+    }
+
+    @Test
+    void holdIsStillAllowedTenMinutesAfterTheShowtimeStarted() {
+        stubShowtimeStartingAt(NOW.minusSeconds(600));
+        when(bookingRepository.findFirstByUserIdAndStatus(USER_ID, BookingStatus.PENDING)).thenReturn(Optional.empty());
+        when(seatReservationRepository.findByShowtimeIdAndSeatId(SHOWTIME_ID, 11L)).thenReturn(Optional.empty());
+
+        SeatHoldResponse seatHoldResponse = seatHoldService.holdSeat(USER_ID, SHOWTIME_ID, 11L);
+
+        assertEquals(1, seatHoldResponse.seats().size());
+    }
+
+    @Test
+    void holdIsRejectedMoreThanThirtyMinutesAfterTheShowtimeStarted() {
+        stubShowtimeStartingAt(NOW.minusSeconds(31 * 60));
+
+        AppException appException =
+                assertThrows(AppException.class, () -> seatHoldService.holdSeat(USER_ID, SHOWTIME_ID, 11L));
+
+        assertEquals("SHOWTIME_STARTED", appException.getErrorCode());
+        verify(redissonClient, never()).getLock(any(String.class));
+    }
+
+    @Test
+    void holdExpiryIsCappedAtTheEndOfTheLateBookingWindow() {
+        stubShowtimeStartingAt(NOW.minusSeconds(25 * 60));
+        when(bookingRepository.findFirstByUserIdAndStatus(USER_ID, BookingStatus.PENDING)).thenReturn(Optional.empty());
+        when(seatReservationRepository.findByShowtimeIdAndSeatId(SHOWTIME_ID, 11L)).thenReturn(Optional.empty());
+
+        seatHoldService.holdSeat(USER_ID, SHOWTIME_ID, 11L);
+
+        assertEquals(NOW.plusSeconds(5 * 60), storedBooking.getExpiresAt());
+        assertEquals(NOW.plusSeconds(5 * 60), storedSeatReservations.get(0).getExpiresAt());
     }
 
     @Test
@@ -301,6 +337,12 @@ class SeatHoldServiceTest {
         TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
         verify(seatStatusBroadcaster)
                 .broadcast(eq(SHOWTIME_ID), eq(List.of(new SeatStateChange(11L, SeatAvailability.AVAILABLE))));
+    }
+
+    private void stubShowtimeStartingAt(Instant startTime) {
+        when(showtimeQueryService.findShowtimeInfo(SHOWTIME_ID)).thenReturn(Optional.of(
+                new ShowtimeInfoResponse(SHOWTIME_ID, 7L, HALL_ID, startTime, startTime.plusSeconds(7200),
+                        new BigDecimal("90000"), ShowtimeStatus.ACTIVE)));
     }
 
     private Booking booking(Long id, Long showtimeId, Instant expiresAt) {

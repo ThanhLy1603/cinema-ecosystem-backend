@@ -15,5 +15,6 @@ public record BookableShowtimeResponse(
         BigDecimal basePrice,
         int totalSeats,
         int availableSeats,
-        boolean soldOut) {
+        boolean soldOut,
+        boolean started) {
 }

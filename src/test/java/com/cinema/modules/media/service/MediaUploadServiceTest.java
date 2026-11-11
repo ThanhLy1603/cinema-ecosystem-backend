@@ -1,7 +1,7 @@
 package com.cinema.modules.media.service;
 
 import com.cinema.common.exception.AppException;
-import com.cinema.config.CloudinaryProperties;
+import com.cinema.config.properties.CloudinaryProperties;
 import com.cinema.modules.media.dto.response.UploadSignatureResponse;
 import com.cinema.modules.media.enums.MediaPurpose;
 import com.cinema.modules.media.util.CloudinarySigner;

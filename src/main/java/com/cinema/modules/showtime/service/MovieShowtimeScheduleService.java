@@ -1,7 +1,9 @@
 package com.cinema.modules.showtime.service;
 
 import com.cinema.common.exception.AppException;
+import com.cinema.common.util.BookingWindow;
 import com.cinema.common.util.BusinessZone;
+import com.cinema.config.properties.BookingPolicyProperties;
 import com.cinema.modules.cinema.dto.response.CinemaOptionResponse;
 import com.cinema.modules.cinema.dto.response.HallInfoResponse;
 import com.cinema.modules.cinema.enums.HallStatus;
@@ -40,6 +42,7 @@ public class MovieShowtimeScheduleService implements IMovieShowtimeScheduleServi
     private final ShowtimeSeatOccupancyReader showtimeSeatOccupancyReader;
     private final ICinemaQueryService cinemaQueryService;
     private final IMovieQueryService movieQueryService;
+    private final BookingPolicyProperties bookingPolicyProperties;
     private final Clock clock;
 
     public MovieShowtimeScheduleService(
@@ -47,11 +50,13 @@ public class MovieShowtimeScheduleService implements IMovieShowtimeScheduleServi
             ShowtimeSeatOccupancyReader showtimeSeatOccupancyReader,
             ICinemaQueryService cinemaQueryService,
             IMovieQueryService movieQueryService,
+            BookingPolicyProperties bookingPolicyProperties,
             Clock clock) {
         this.showtimeRepository = showtimeRepository;
         this.showtimeSeatOccupancyReader = showtimeSeatOccupancyReader;
         this.cinemaQueryService = cinemaQueryService;
         this.movieQueryService = movieQueryService;
+        this.bookingPolicyProperties = bookingPolicyProperties;
         this.clock = clock;
     }
 
@@ -59,8 +64,9 @@ public class MovieShowtimeScheduleService implements IMovieShowtimeScheduleServi
     public MovieShowtimeDatesResponse findShowtimeDates(Long movieId, YearMonth yearMonth, Long cinemaId) {
         requireVisibleMovie(movieId);
         Instant now = Instant.now(clock);
+        Instant earliestStart = BookingWindow.earliestBookableStart(now, bookingPolicyProperties.lateBookingWindow());
         Instant monthStart = BusinessZone.startOfDay(yearMonth.atDay(1));
-        Instant windowFrom = monthStart.isBefore(now) ? now : monthStart;
+        Instant windowFrom = monthStart.isBefore(earliestStart) ? earliestStart : monthStart;
         Instant windowTo = BusinessZone.startOfNextDay(yearMonth.atEndOfMonth());
         Map<Long, HallInfoResponse> hallInfoResponses = findBookableHalls(resolveCinemas(cinemaId));
         if (hallInfoResponses.isEmpty() || !windowFrom.isBefore(windowTo)) {
@@ -79,8 +85,9 @@ public class MovieShowtimeScheduleService implements IMovieShowtimeScheduleServi
     public List<CinemaShowtimesResponse> findShowtimesByDate(Long movieId, LocalDate date, Long cinemaId) {
         requireVisibleMovie(movieId);
         Instant now = Instant.now(clock);
+        Instant earliestStart = BookingWindow.earliestBookableStart(now, bookingPolicyProperties.lateBookingWindow());
         Instant dayStart = BusinessZone.startOfDay(date);
-        Instant windowFrom = dayStart.isBefore(now) ? now : dayStart;
+        Instant windowFrom = dayStart.isBefore(earliestStart) ? earliestStart : dayStart;
         Instant windowTo = BusinessZone.startOfNextDay(date);
         List<CinemaOptionResponse> cinemaOptionResponses = resolveCinemas(cinemaId);
         Map<Long, HallInfoResponse> hallInfoResponses = findBookableHalls(cinemaOptionResponses);
@@ -103,7 +110,8 @@ public class MovieShowtimeScheduleService implements IMovieShowtimeScheduleServi
                             showtime,
                             hallInfoResponses.get(showtime.getHallId()),
                             totalSeatCounts.getOrDefault(showtime.getHallId(), 0),
-                            occupiedSeatCounts.getOrDefault(showtime.getId(), 0)))
+                            occupiedSeatCounts.getOrDefault(showtime.getId(), 0),
+                            now))
                     .toList();
             if (!bookableShowtimeResponses.isEmpty()) {
                 cinemaShowtimesResponses.add(new CinemaShowtimesResponse(
@@ -153,7 +161,7 @@ public class MovieShowtimeScheduleService implements IMovieShowtimeScheduleServi
     }
 
     private BookableShowtimeResponse toBookableShowtime(
-            Showtime showtime, HallInfoResponse hallInfoResponse, int totalSeats, int occupiedSeats) {
+            Showtime showtime, HallInfoResponse hallInfoResponse, int totalSeats, int occupiedSeats, Instant now) {
         int availableSeats = Math.max(0, totalSeats - occupiedSeats);
         return new BookableShowtimeResponse(
                 showtime.getId(),
@@ -165,6 +173,7 @@ public class MovieShowtimeScheduleService implements IMovieShowtimeScheduleServi
                 showtime.getBasePrice(),
                 totalSeats,
                 availableSeats,
-                availableSeats == 0);
+                availableSeats == 0,
+                !showtime.getStartTime().isAfter(now));
     }
 }

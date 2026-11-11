@@ -5,6 +5,7 @@ import com.cinema.modules.auth.security.AuthenticatedUser;
 import com.cinema.modules.cinema.dto.request.GenerateSeatsRequest;
 import com.cinema.modules.cinema.dto.request.SeatMapRequest;
 import com.cinema.modules.cinema.dto.response.SeatLayoutResponse;
+import com.cinema.modules.cinema.dto.response.SeatMapLockResponse;
 import com.cinema.modules.cinema.service.interfaces.ISeatMapService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -34,6 +35,12 @@ public class AdminSeatMapController {
     public ResponseEntity<ApiResponse<SeatLayoutResponse>> getSeatMap(
             @AuthenticationPrincipal AuthenticatedUser authenticatedUser, @PathVariable Long hallId) {
         return ResponseEntity.ok(ApiResponse.success(seatMapService.getSeatMap(authenticatedUser.userId(), hallId)));
+    }
+
+    @GetMapping("/seat-map/lock")
+    public ResponseEntity<ApiResponse<SeatMapLockResponse>> getSeatMapLock(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser, @PathVariable Long hallId) {
+        return ResponseEntity.ok(ApiResponse.success(seatMapService.getSeatMapLock(authenticatedUser.userId(), hallId)));
     }
 
     @PutMapping("/seat-map")

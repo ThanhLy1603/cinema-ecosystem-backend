@@ -1,4 +1,4 @@
-package com.cinema.config;
+package com.cinema.config.websocket;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.Message;

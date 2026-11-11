@@ -6,6 +6,7 @@ import com.cinema.modules.auth.security.AuthenticatedUser;
 import com.cinema.modules.cinema.dto.request.GenerateSeatsRequest;
 import com.cinema.modules.cinema.dto.request.SeatMapRequest;
 import com.cinema.modules.cinema.dto.response.SeatLayoutResponse;
+import com.cinema.modules.cinema.dto.response.SeatMapLockResponse;
 import com.cinema.modules.cinema.dto.response.SeatLayoutSeatResponse;
 import com.cinema.modules.cinema.enums.HallStatus;
 import com.cinema.modules.cinema.enums.ScreenType;
@@ -92,6 +93,17 @@ class AdminSeatMapControllerTest {
                 .andExpect(jsonPath("$.data.seats[0].type").value("SWEETBOX"))
                 .andExpect(jsonPath("$.data.seats[0].span").value(2))
                 .andExpect(jsonPath("$.data.seats[0].surcharge").value(45000));
+    }
+
+    @Test
+    void getSeatMapLockReturnsTheLockState() throws Exception {
+        when(seatMapService.getSeatMapLock(USER_ID, HALL_ID)).thenReturn(new SeatMapLockResponse(true, 2L, 1L));
+
+        mockMvc.perform(get("/api/v1/admin/halls/12/seat-map/lock"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.locked").value(true))
+                .andExpect(jsonPath("$.data.upcomingShowtimeCount").value(2))
+                .andExpect(jsonPath("$.data.bookedShowtimeCount").value(1));
     }
 
     @Test

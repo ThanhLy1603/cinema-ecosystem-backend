@@ -1,4 +1,4 @@
-package com.cinema.config;
+package com.cinema.config.properties;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;

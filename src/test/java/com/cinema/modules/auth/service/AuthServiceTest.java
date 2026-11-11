@@ -1,7 +1,7 @@
 package com.cinema.modules.auth.service;
 
 import com.cinema.common.exception.AppException;
-import com.cinema.config.JwtProperties;
+import com.cinema.config.properties.JwtProperties;
 import com.cinema.modules.auth.dto.request.LoginRequest;
 import com.cinema.modules.auth.dto.request.RegisterRequest;
 import com.cinema.modules.auth.dto.response.UserResponse;

@@ -5,6 +5,7 @@ import com.cinema.modules.cinema.dto.request.GenerateSeatsRequest;
 import com.cinema.modules.cinema.dto.request.SeatCellRequest;
 import com.cinema.modules.cinema.dto.request.SeatMapRequest;
 import com.cinema.modules.cinema.dto.response.SeatLayoutResponse;
+import com.cinema.modules.cinema.dto.response.SeatMapLockResponse;
 import com.cinema.modules.cinema.entity.Hall;
 import com.cinema.modules.cinema.entity.Seat;
 import com.cinema.modules.cinema.entity.SeatType;
@@ -68,6 +69,18 @@ public class SeatMapService implements ISeatMapService {
                 hall, seatRepository.findAllByHallIdAndDeletedFalseOrderBySeatRowAscSeatNumberAsc(hallId));
     }
 
+    @Transactional(readOnly = true)
+    @Override
+    public SeatMapLockResponse getSeatMapLock(Long actorUserId, Long hallId) {
+        Hall hall = cinemaAccessGuard.requireAccessibleHall(actorUserId, hallId);
+        Instant now = Instant.now(clock);
+        long upcomingShowtimeCount = hallUsageChecker.countUpcomingShowtimesByHall(hall.getId(), now);
+        long bookedShowtimeCount = upcomingShowtimeCount == 0
+                ? 0
+                : hallUsageChecker.countShowtimesWithBookingsByHall(hall.getId(), now);
+        return new SeatMapLockResponse(upcomingShowtimeCount > 0, upcomingShowtimeCount, bookedShowtimeCount);
+    }
+
     @Transactional
     @Override
     public SeatLayoutResponse saveSeatMap(Long actorUserId, Long hallId, SeatMapRequest seatMapRequest) {
@@ -108,6 +121,8 @@ public class SeatMapService implements ISeatMapService {
     }
 
     private SeatLayoutResponse applySeatCells(Hall hall, List<SeatCellRequest> seatCellRequests) {
+        Instant now = Instant.now(clock);
+        rejectEditWhileShowtimesAreScheduled(hall, now);
         Map<String, SeatType> seatTypesByCode = loadSeatTypesByCode();
         SeatMapValidator.validate(seatCellRequests, seatTypesByCode);
 
@@ -123,8 +138,6 @@ public class SeatMapService implements ISeatMapService {
         List<Seat> removedSeats = existingSeats.stream()
                 .filter(seat -> !requestedLabels.contains(SeatMapValidator.label(seat.getSeatRow(), seat.getSeatNumber())))
                 .toList();
-        Instant now = Instant.now(clock);
-        rejectRemovalOfSeatsWithUpcomingShowtimes(removedSeats, now);
         if (!removedSeats.isEmpty()) {
             removedSeats.forEach(removedSeat -> removedSeat.markDeleted(now));
             seatRepository.saveAll(removedSeats);
@@ -153,25 +166,17 @@ public class SeatMapService implements ISeatMapService {
         return CinemaMapper.toSeatLayoutResponse(savedHall, resultingSeats);
     }
 
-    private void rejectRemovalOfSeatsWithUpcomingShowtimes(List<Seat> removedSeats, Instant now) {
-        if (removedSeats.isEmpty()) {
-            return;
+    private void rejectEditWhileShowtimesAreScheduled(Hall hall, Instant now) {
+        long showtimeCount = hallUsageChecker.countUpcomingShowtimesByHall(hall.getId(), now);
+        if (showtimeCount > 0) {
+            throw new AppException(
+                    "Không thể sửa sơ đồ ghế vì phòng chiếu còn " + showtimeCount
+                            + " suất chiếu chưa kết thúc (đang mở bán hoặc đang chiếu). "
+                            + "Hãy chờ các suất này kết thúc, hoặc hủy các suất chưa có khách đặt vé ở trang Suất chiếu "
+                            + "rồi chỉnh sửa lại",
+                    HttpStatus.CONFLICT,
+                    "SEAT_MAP_LOCKED");
         }
-        Set<Long> seatIdsInUse = hallUsageChecker.findSeatIdsWithUpcomingShowtimes(
-                removedSeats.stream().map(Seat::getId).toList(), now);
-        if (seatIdsInUse.isEmpty()) {
-            return;
-        }
-        String seatLabelsInUse = removedSeats.stream()
-                .filter(seat -> seatIdsInUse.contains(seat.getId()))
-                .map(seat -> SeatMapValidator.label(seat.getSeatRow(), seat.getSeatNumber()))
-                .limit(10)
-                .collect(Collectors.joining(", "));
-        throw new AppException(
-                "Không thể xóa ghế còn vé hoặc lượt giữ chỗ cho suất chiếu chưa diễn ra: " + seatLabelsInUse
-                        + ". Hãy chuyển ghế sang trạng thái bảo trì thay vì xóa",
-                HttpStatus.CONFLICT,
-                "SEAT_IN_USE");
     }
 
     private Map<String, SeatType> loadSeatTypesByCode() {

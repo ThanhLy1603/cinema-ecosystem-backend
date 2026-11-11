@@ -5,6 +5,7 @@ import com.cinema.modules.cinema.dto.request.GenerateSeatsRequest;
 import com.cinema.modules.cinema.dto.request.SeatCellRequest;
 import com.cinema.modules.cinema.dto.request.SeatMapRequest;
 import com.cinema.modules.cinema.dto.response.SeatLayoutResponse;
+import com.cinema.modules.cinema.dto.response.SeatMapLockResponse;
 import com.cinema.modules.cinema.dto.response.SeatLayoutSeatResponse;
 import com.cinema.modules.cinema.entity.Hall;
 import com.cinema.modules.cinema.entity.Seat;
@@ -141,13 +142,13 @@ class SeatMapServiceTest {
     }
 
     @Test
-    void saveSeatMapSoftDeletesRemovedSeatsWithoutUpcomingShowtimes() {
+    void saveSeatMapSoftDeletesRemovedSeatsWhenNoShowtimeIsScheduled() {
         hall.setVersion(HALL_VERSION);
         Seat keptSeat = seat(11L, "A", 1, standardSeatType);
         Seat removedSeat = seat(12L, "A", 2, standardSeatType);
         when(seatRepository.findAllByHallIdAndDeletedFalseOrderBySeatRowAscSeatNumberAsc(HALL_ID))
                 .thenReturn(List.of(keptSeat, removedSeat));
-        when(hallUsageChecker.findSeatIdsWithUpcomingShowtimes(List.of(12L), NOW)).thenReturn(Set.of());
+        when(hallUsageChecker.countUpcomingShowtimesByHall(HALL_ID, NOW)).thenReturn(0L);
         SeatMapRequest seatMapRequest = new SeatMapRequest(HALL_VERSION, List.of(cell("A", 1, "STANDARD")));
 
         SeatLayoutResponse seatLayoutResponse = seatMapService.saveSeatMap(USER_ID, HALL_ID, seatMapRequest);
@@ -162,34 +163,58 @@ class SeatMapServiceTest {
     }
 
     @Test
-    void saveSeatMapRefusesToRemoveSeatsWithTicketsOrHoldsForUpcomingShowtimes() {
+    void saveSeatMapIsLockedWhileAnyShowtimeIsScheduledEvenWithoutBookings() {
         hall.setVersion(HALL_VERSION);
-        Seat keptSeat = seat(11L, "A", 1, standardSeatType);
-        Seat usedSeat = seat(12L, "A", 2, standardSeatType);
-        when(seatRepository.findAllByHallIdAndDeletedFalseOrderBySeatRowAscSeatNumberAsc(HALL_ID))
-                .thenReturn(List.of(keptSeat, usedSeat));
-        when(hallUsageChecker.findSeatIdsWithUpcomingShowtimes(List.of(12L), NOW)).thenReturn(Set.of(12L));
-        SeatMapRequest seatMapRequest = new SeatMapRequest(HALL_VERSION, List.of(cell("A", 1, "STANDARD")));
+        Seat existingSeat = seat(11L, "A", 1, standardSeatType);
+        when(hallUsageChecker.countUpcomingShowtimesByHall(HALL_ID, NOW)).thenReturn(2L);
+        SeatMapRequest seatMapRequest = new SeatMapRequest(HALL_VERSION, List.of(cell("A", 1, "VIP")));
 
         AppException appException =
                 assertThrows(AppException.class, () -> seatMapService.saveSeatMap(USER_ID, HALL_ID, seatMapRequest));
 
-        assertEquals("SEAT_IN_USE", appException.getErrorCode());
+        assertEquals("SEAT_MAP_LOCKED", appException.getErrorCode());
         assertEquals(HttpStatus.CONFLICT, appException.getStatus());
-        assertTrue(appException.getMessage().contains("A2"));
-        assertFalse(usedSeat.isDeleted());
+        assertTrue(appException.getMessage().contains("2 suất chiếu"));
+        assertFalse(existingSeat.isDeleted());
         verify(seatRepository, never()).saveAll(anyList());
+        verify(hallRepository, never()).saveAndFlush(any(Hall.class));
+        verify(publicCinemaCache, never()).evictAfterCommit();
     }
 
     @Test
-    void saveSeatMapDoesNotAskTheUsageCheckerWhenNothingIsRemoved() {
+    void saveSeatMapIsLockedEvenForChangesThatOnlyTouchSeatTypeOrStatus() {
         hall.setVersion(HALL_VERSION);
-        Seat existingSeat = seat(11L, "A", 1, standardSeatType);
-        when(seatRepository.findAllByHallIdAndDeletedFalseOrderBySeatRowAscSeatNumberAsc(HALL_ID)).thenReturn(List.of(existingSeat));
+        when(hallUsageChecker.countUpcomingShowtimesByHall(HALL_ID, NOW)).thenReturn(1L);
+        SeatMapRequest seatMapRequest = new SeatMapRequest(
+                HALL_VERSION, List.of(new SeatCellRequest("A", 1, "STANDARD", SeatStatus.MAINTENANCE)));
 
-        seatMapService.saveSeatMap(USER_ID, HALL_ID, new SeatMapRequest(HALL_VERSION, List.of(cell("A", 1, "STANDARD"))));
+        AppException appException =
+                assertThrows(AppException.class, () -> seatMapService.saveSeatMap(USER_ID, HALL_ID, seatMapRequest));
 
-        verify(hallUsageChecker, never()).findSeatIdsWithUpcomingShowtimes(any(), any());
+        assertEquals("SEAT_MAP_LOCKED", appException.getErrorCode());
+    }
+
+    @Test
+    void seatMapLockReportsScheduledAndBookedShowtimeCounts() {
+        when(hallUsageChecker.countUpcomingShowtimesByHall(HALL_ID, NOW)).thenReturn(3L);
+        when(hallUsageChecker.countShowtimesWithBookingsByHall(HALL_ID, NOW)).thenReturn(1L);
+
+        SeatMapLockResponse seatMapLockResponse = seatMapService.getSeatMapLock(USER_ID, HALL_ID);
+
+        assertTrue(seatMapLockResponse.locked());
+        assertEquals(3L, seatMapLockResponse.upcomingShowtimeCount());
+        assertEquals(1L, seatMapLockResponse.bookedShowtimeCount());
+    }
+
+    @Test
+    void seatMapIsNotLockedWhenNoShowtimeIsScheduled() {
+        when(hallUsageChecker.countUpcomingShowtimesByHall(HALL_ID, NOW)).thenReturn(0L);
+
+        SeatMapLockResponse seatMapLockResponse = seatMapService.getSeatMapLock(USER_ID, HALL_ID);
+
+        assertFalse(seatMapLockResponse.locked());
+        assertEquals(0L, seatMapLockResponse.bookedShowtimeCount());
+        verify(hallUsageChecker, never()).countShowtimesWithBookingsByHall(any(), any());
     }
 
     @Test

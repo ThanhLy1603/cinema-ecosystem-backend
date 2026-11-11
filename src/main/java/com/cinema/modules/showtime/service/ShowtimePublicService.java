@@ -1,6 +1,8 @@
 package com.cinema.modules.showtime.service;
 
 import com.cinema.common.exception.AppException;
+import com.cinema.common.util.BookingWindow;
+import com.cinema.config.properties.BookingPolicyProperties;
 import com.cinema.common.util.BusinessZone;
 import com.cinema.modules.cinema.dto.response.HallInfoResponse;
 import com.cinema.modules.cinema.enums.HallStatus;
@@ -37,16 +39,19 @@ public class ShowtimePublicService implements IShowtimePublicService {
     private final ShowtimeRepository showtimeRepository;
     private final ICinemaQueryService cinemaQueryService;
     private final IMovieQueryService movieQueryService;
+    private final BookingPolicyProperties bookingPolicyProperties;
     private final Clock clock;
 
     public ShowtimePublicService(
             ShowtimeRepository showtimeRepository,
             ICinemaQueryService cinemaQueryService,
             IMovieQueryService movieQueryService,
+            BookingPolicyProperties bookingPolicyProperties,
             Clock clock) {
         this.showtimeRepository = showtimeRepository;
         this.cinemaQueryService = cinemaQueryService;
         this.movieQueryService = movieQueryService;
+        this.bookingPolicyProperties = bookingPolicyProperties;
         this.clock = clock;
     }
 
@@ -62,7 +67,8 @@ public class ShowtimePublicService implements IShowtimePublicService {
             return List.of();
         }
         Instant windowStart = BusinessZone.startOfDay(showtimeDate);
-        Instant windowFrom = windowStart.isBefore(now) ? now : windowStart;
+        Instant earliestStart = BookingWindow.earliestBookableStart(now, bookingPolicyProperties.lateBookingWindow());
+        Instant windowFrom = windowStart.isBefore(earliestStart) ? earliestStart : windowStart;
         Specification<Showtime> specification =
                 Specification.where(ShowtimeSpecifications.inHalls(activeHallInfoResponses.keySet()))
                         .and(ShowtimeSpecifications.startingBetween(windowFrom, BusinessZone.startOfNextDay(showtimeDate)))

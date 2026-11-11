@@ -1,6 +1,6 @@
 package com.cinema.modules.auth.security;
 
-import com.cinema.config.CookieProperties;
+import com.cinema.config.properties.CookieProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseCookie;
 

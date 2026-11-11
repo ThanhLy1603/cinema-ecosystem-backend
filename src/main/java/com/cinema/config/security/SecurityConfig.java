@@ -1,9 +1,8 @@
-package com.cinema.config;
+package com.cinema.config.security;
 
 import com.cinema.modules.auth.entity.Role;
 import com.cinema.modules.auth.security.JwtAuthenticationFilter;
 import com.cinema.modules.auth.security.RestSecurityErrorHandler;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,8 +20,6 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
-@EnableConfigurationProperties({
-        JwtProperties.class, CookieProperties.class, GoogleProperties.class, AppMailProperties.class})
 public class SecurityConfig {
 
     private static final int BCRYPT_STRENGTH = 12;

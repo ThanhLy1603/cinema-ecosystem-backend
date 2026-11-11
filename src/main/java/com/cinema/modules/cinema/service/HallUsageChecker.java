@@ -6,9 +6,6 @@ import org.springframework.stereotype.Component;
 
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Set;
 
 @Component
 public class HallUsageChecker {
@@ -37,20 +34,20 @@ public class HallUsageChecker {
         return showtimeCount == null ? 0 : showtimeCount;
     }
 
-    public Set<Long> findSeatIdsWithUpcomingShowtimes(Collection<Long> seatIds, Instant now) {
-        if (seatIds == null || seatIds.isEmpty()) {
-            return Set.of();
-        }
-        return new HashSet<>(namedParameterJdbcTemplate.queryForList(
-                "select seat_reservation.seat_id from seat_reservations seat_reservation "
+    public long countShowtimesWithBookingsByHall(Long hallId, Instant now) {
+        Long showtimeCount = namedParameterJdbcTemplate.queryForObject(
+                "select count(distinct booked_showtime.showtime_id) from ("
+                        + "select seat_reservation.showtime_id from seat_reservations seat_reservation "
                         + "join showtimes showtime on showtime.id = seat_reservation.showtime_id "
-                        + "where seat_reservation.seat_id in (:seatIds) and showtime.end_time > :now "
+                        + "where showtime.hall_id = :hallId and showtime.end_time > :now "
                         + "and not (seat_reservation.status = 'HELD' and seat_reservation.expires_at < :now) "
-                        + "union "
-                        + "select ticket.seat_id from tickets ticket "
+                        + "union all "
+                        + "select ticket.showtime_id from tickets ticket "
                         + "join showtimes showtime on showtime.id = ticket.showtime_id "
-                        + "where ticket.seat_id in (:seatIds) and showtime.end_time > :now",
-                new MapSqlParameterSource("seatIds", seatIds).addValue("now", Timestamp.from(now)),
-                Long.class));
+                        + "where showtime.hall_id = :hallId and showtime.end_time > :now"
+                        + ") booked_showtime",
+                new MapSqlParameterSource("hallId", hallId).addValue("now", Timestamp.from(now)),
+                Long.class);
+        return showtimeCount == null ? 0 : showtimeCount;
     }
 }

@@ -27,11 +27,14 @@ class GenreAdminServiceTest {
     @Mock
     private GenreRepository genreRepository;
 
+    @Mock
+    private PublicMovieCache publicMovieCache;
+
     private GenreAdminService genreAdminService;
 
     @BeforeEach
     void setUp() {
-        genreAdminService = new GenreAdminService(genreRepository);
+        genreAdminService = new GenreAdminService(genreRepository, publicMovieCache);
     }
 
     private void stubSave() {
@@ -51,6 +54,7 @@ class GenreAdminServiceTest {
 
         assertEquals("Khoa Học Viễn Tưởng", genreResponse.name());
         assertEquals("khoa-hoc-vien-tuong-2", genreResponse.slug());
+        verify(publicMovieCache).evictAfterCommit();
     }
 
     @Test
@@ -62,6 +66,7 @@ class GenreAdminServiceTest {
 
         assertEquals("GENRE_NAME_EXISTS", appException.getErrorCode());
         verify(genreRepository, never()).saveAndFlush(any());
+        verify(publicMovieCache, never()).evictAfterCommit();
     }
 
     @Test

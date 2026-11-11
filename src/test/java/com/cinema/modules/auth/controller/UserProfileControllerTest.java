@@ -2,7 +2,7 @@ package com.cinema.modules.auth.controller;
 
 import com.cinema.common.exception.AppException;
 import com.cinema.common.exception.GlobalExceptionHandler;
-import com.cinema.config.CookieProperties;
+import com.cinema.config.properties.CookieProperties;
 import com.cinema.modules.auth.dto.request.ChangePasswordRequest;
 import com.cinema.modules.auth.dto.request.UpdateProfileRequest;
 import com.cinema.modules.auth.dto.response.UserProfileResponse;

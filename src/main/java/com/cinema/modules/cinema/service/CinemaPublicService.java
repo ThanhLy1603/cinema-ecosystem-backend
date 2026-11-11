@@ -89,6 +89,13 @@ public class CinemaPublicService implements ICinemaPublicService {
     @Transactional(readOnly = true)
     @Override
     public SeatLayoutResponse findPublicSeatLayout(Long hallId) {
+        return publicCinemaCache.getOrLoad(
+                "seat-layout:" + hallId,
+                new TypeReference<SeatLayoutResponse>() { },
+                () -> loadPublicSeatLayout(hallId));
+    }
+
+    private SeatLayoutResponse loadPublicSeatLayout(Long hallId) {
         Hall hall = hallRepository.findByIdAndDeleted(hallId, false)
                 .filter(foundHall -> foundHall.getStatus() == HallStatus.ACTIVE)
                 .orElseThrow(CinemaAccessGuard::hallNotFound);

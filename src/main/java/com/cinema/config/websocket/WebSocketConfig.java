@@ -1,4 +1,4 @@
-package com.cinema.config;
+package com.cinema.config.websocket;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;

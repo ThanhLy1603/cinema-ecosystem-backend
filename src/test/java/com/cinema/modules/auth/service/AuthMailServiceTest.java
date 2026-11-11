@@ -1,6 +1,6 @@
 package com.cinema.modules.auth.service;
 
-import com.cinema.config.AppMailProperties;
+import com.cinema.config.properties.AppMailProperties;
 import com.cinema.modules.auth.event.EmailVerificationRequestedEvent;
 import com.cinema.modules.auth.event.PasswordResetRequestedEvent;
 import org.junit.jupiter.api.Test;
