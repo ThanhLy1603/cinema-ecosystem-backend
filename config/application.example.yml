@@ -5,6 +5,11 @@ spring:
     password: <App Password 16 ký tự của Gmail gửi mail, viết liền, tạo tại https://myaccount.google.com/apppasswords>
 
 app:
+  cors:
+    allowed-origin-patterns:
+      - http://localhost:3000
+      - http://127.0.0.1:3000
+      - https://<tên-miền-ngrok>.ngrok-free.dev
   jwt:
     secret: <chuỗi ngẫu nhiên tối thiểu 32 byte, tạo bằng: openssl rand -hex 32>
   cookie:
