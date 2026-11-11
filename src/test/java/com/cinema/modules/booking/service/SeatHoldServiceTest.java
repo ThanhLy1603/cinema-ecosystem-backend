@@ -9,6 +9,7 @@ import com.cinema.modules.booking.entity.SeatReservation;
 import com.cinema.modules.booking.enums.BookingStatus;
 import com.cinema.modules.booking.enums.SeatAvailability;
 import com.cinema.modules.booking.enums.SeatReservationStatus;
+import com.cinema.modules.booking.repository.BookingFnbDetailRepository;
 import com.cinema.modules.booking.repository.BookingRepository;
 import com.cinema.modules.booking.repository.SeatReservationRepository;
 import com.cinema.modules.booking.service.interfaces.ISeatStatusBroadcaster;
@@ -77,6 +78,9 @@ class SeatHoldServiceTest {
     private SeatReservationRepository seatReservationRepository;
 
     @Mock
+    private BookingFnbDetailRepository bookingFnbDetailRepository;
+
+    @Mock
     private IShowtimeQueryService showtimeQueryService;
 
     @Mock
@@ -107,6 +111,7 @@ class SeatHoldServiceTest {
         seatHoldService = new SeatHoldService(
                 bookingRepository,
                 seatReservationRepository,
+                bookingFnbDetailRepository,
                 showtimeQueryService,
                 dynamicPricingService,
                 cinemaQueryService,

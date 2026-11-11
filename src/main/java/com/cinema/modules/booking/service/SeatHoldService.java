@@ -12,6 +12,7 @@ import com.cinema.modules.booking.entity.SeatReservation;
 import com.cinema.modules.booking.enums.BookingStatus;
 import com.cinema.modules.booking.enums.SeatAvailability;
 import com.cinema.modules.booking.enums.SeatReservationStatus;
+import com.cinema.modules.booking.repository.BookingFnbDetailRepository;
 import com.cinema.modules.booking.repository.BookingRepository;
 import com.cinema.modules.booking.repository.SeatReservationRepository;
 import com.cinema.modules.booking.service.interfaces.ISeatHoldService;
@@ -39,6 +40,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
@@ -54,6 +56,7 @@ public class SeatHoldService implements ISeatHoldService {
 
     private final BookingRepository bookingRepository;
     private final SeatReservationRepository seatReservationRepository;
+    private final BookingFnbDetailRepository bookingFnbDetailRepository;
     private final IShowtimeQueryService showtimeQueryService;
     private final IDynamicPricingService dynamicPricingService;
     private final ICinemaQueryService cinemaQueryService;
@@ -66,6 +69,7 @@ public class SeatHoldService implements ISeatHoldService {
     public SeatHoldService(
             BookingRepository bookingRepository,
             SeatReservationRepository seatReservationRepository,
+            BookingFnbDetailRepository bookingFnbDetailRepository,
             IShowtimeQueryService showtimeQueryService,
             IDynamicPricingService dynamicPricingService,
             ICinemaQueryService cinemaQueryService,
@@ -76,6 +80,7 @@ public class SeatHoldService implements ISeatHoldService {
             Clock clock) {
         this.bookingRepository = bookingRepository;
         this.seatReservationRepository = seatReservationRepository;
+        this.bookingFnbDetailRepository = bookingFnbDetailRepository;
         this.showtimeQueryService = showtimeQueryService;
         this.dynamicPricingService = dynamicPricingService;
         this.cinemaQueryService = cinemaQueryService;
@@ -179,6 +184,7 @@ public class SeatHoldService implements ISeatHoldService {
         seatReservationRepository.flush();
         broadcastAfterCommit(showtimeId, List.of(new SeatStateChange(seatId, SeatAvailability.AVAILABLE)));
         if (seatReservationRepository.findByBookingIdOrderBySeatId(booking.getId()).isEmpty()) {
+            bookingFnbDetailRepository.deleteAllByBookingId(booking.getId());
             booking.setStatus(BookingStatus.CANCELLED);
             updateBookingAmounts(booking, BigDecimal.ZERO);
             return emptyHold(showtimeId, now);
@@ -240,7 +246,10 @@ public class SeatHoldService implements ISeatHoldService {
         }
     }
 
-    private void updateBookingAmounts(Booking booking, BigDecimal totalAmount) {
+    private void updateBookingAmounts(Booking booking, BigDecimal ticketAmount) {
+        BigDecimal fnbAmount = Objects.requireNonNullElse(
+                bookingFnbDetailRepository.sumAmountByBookingId(booking.getId()), BigDecimal.ZERO);
+        BigDecimal totalAmount = ticketAmount.add(fnbAmount);
         booking.setTotalAmount(totalAmount);
         booking.setFinalAmount(totalAmount.subtract(booking.getDiscountAmount()));
         bookingRepository.save(booking);
