@@ -1,6 +1,7 @@
 package com.cinema.modules.booking.service;
 
 import com.cinema.modules.booking.dto.message.SeatStateChange;
+import com.cinema.modules.booking.entity.Booking;
 import com.cinema.modules.booking.entity.SeatReservation;
 import com.cinema.modules.booking.enums.BookingStatus;
 import com.cinema.modules.booking.enums.SeatAvailability;
@@ -16,8 +17,11 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -43,14 +47,13 @@ public class SeatHoldExpiryService implements ISeatHoldExpiryService {
     @Override
     public int releaseExpiredHolds() {
         Instant now = Instant.now(clock);
-        List<SeatReservation> expiredSeatReservations =
-                seatReservationRepository.findByStatusAndExpiresAtBefore(SeatReservationStatus.HELD, now);
-        bookingRepository.expireOverdueBookings(BookingStatus.PENDING, BookingStatus.EXPIRED, now);
-        if (expiredSeatReservations.isEmpty()) {
+        List<SeatReservation> releasedSeatReservations = new ArrayList<>();
+        releasedSeatReservations.addAll(expireOverdueBookings(now));
+        releasedSeatReservations.addAll(deleteOrphanExpiredHolds(now));
+        if (releasedSeatReservations.isEmpty()) {
             return 0;
         }
-        seatReservationRepository.deleteAllInBatch(expiredSeatReservations);
-        Map<Long, List<SeatStateChange>> changesByShowtimeId = expiredSeatReservations.stream()
+        Map<Long, List<SeatStateChange>> changesByShowtimeId = releasedSeatReservations.stream()
                 .collect(Collectors.groupingBy(
                         SeatReservation::getShowtimeId,
                         Collectors.mapping(
@@ -62,6 +65,42 @@ public class SeatHoldExpiryService implements ISeatHoldExpiryService {
                 changesByShowtimeId.forEach(seatStatusBroadcaster::broadcast);
             }
         });
-        return expiredSeatReservations.size();
+        return releasedSeatReservations.size();
+    }
+
+    private List<SeatReservation> expireOverdueBookings(Instant now) {
+        List<Booking> overdueBookings = bookingRepository.findOverdueForUpdate(BookingStatus.PENDING, now);
+        List<SeatReservation> releasedSeatReservations = new ArrayList<>();
+        for (Booking booking : overdueBookings) {
+            List<SeatReservation> heldSeatReservations =
+                    seatReservationRepository.findByBookingIdOrderBySeatId(booking.getId()).stream()
+                            .filter(seatReservation -> seatReservation.getStatus() == SeatReservationStatus.HELD)
+                            .toList();
+            if (!heldSeatReservations.isEmpty()) {
+                seatReservationRepository.deleteHeldByIds(
+                        heldSeatReservations.stream().map(SeatReservation::getId).toList(),
+                        SeatReservationStatus.HELD);
+                releasedSeatReservations.addAll(heldSeatReservations);
+            }
+            booking.setStatus(BookingStatus.EXPIRED);
+        }
+        bookingRepository.saveAll(overdueBookings);
+        return releasedSeatReservations;
+    }
+
+    private List<SeatReservation> deleteOrphanExpiredHolds(Instant now) {
+        List<SeatReservation> orphanSeatReservations =
+                seatReservationRepository.findByStatusAndExpiresAtBefore(SeatReservationStatus.HELD, now);
+        if (orphanSeatReservations.isEmpty()) {
+            return List.of();
+        }
+        List<Long> orphanIds = orphanSeatReservations.stream().map(SeatReservation::getId).toList();
+        seatReservationRepository.deleteHeldByIds(orphanIds, SeatReservationStatus.HELD);
+        Set<Long> survivingIds = new HashSet<>();
+        seatReservationRepository.findAllById(orphanIds)
+                .forEach(survivingSeatReservation -> survivingIds.add(survivingSeatReservation.getId()));
+        return orphanSeatReservations.stream()
+                .filter(seatReservation -> !survivingIds.contains(seatReservation.getId()))
+                .toList();
     }
 }

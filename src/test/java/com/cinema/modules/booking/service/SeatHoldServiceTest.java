@@ -167,7 +167,7 @@ class SeatHoldServiceTest {
 
     @Test
     void firstHoldCreatesPendingBookingWithTenMinuteExpiryAndBroadcastsAfterCommit() {
-        when(bookingRepository.findFirstByUserIdAndStatus(USER_ID, BookingStatus.PENDING)).thenReturn(Optional.empty());
+        when(bookingRepository.findByUserIdAndStatusForUpdate(USER_ID, BookingStatus.PENDING)).thenReturn(Optional.empty());
         when(seatReservationRepository.findByShowtimeIdAndSeatId(SHOWTIME_ID, 11L)).thenReturn(Optional.empty());
 
         SeatHoldResponse seatHoldResponse = seatHoldService.holdSeat(USER_ID, SHOWTIME_ID, 11L);
@@ -189,7 +189,7 @@ class SeatHoldServiceTest {
     @Test
     void holdIsStillAllowedTenMinutesAfterTheShowtimeStarted() {
         stubShowtimeStartingAt(NOW.minusSeconds(600));
-        when(bookingRepository.findFirstByUserIdAndStatus(USER_ID, BookingStatus.PENDING)).thenReturn(Optional.empty());
+        when(bookingRepository.findByUserIdAndStatusForUpdate(USER_ID, BookingStatus.PENDING)).thenReturn(Optional.empty());
         when(seatReservationRepository.findByShowtimeIdAndSeatId(SHOWTIME_ID, 11L)).thenReturn(Optional.empty());
 
         SeatHoldResponse seatHoldResponse = seatHoldService.holdSeat(USER_ID, SHOWTIME_ID, 11L);
@@ -211,7 +211,7 @@ class SeatHoldServiceTest {
     @Test
     void holdExpiryIsCappedAtTheEndOfTheLateBookingWindow() {
         stubShowtimeStartingAt(NOW.minusSeconds(25 * 60));
-        when(bookingRepository.findFirstByUserIdAndStatus(USER_ID, BookingStatus.PENDING)).thenReturn(Optional.empty());
+        when(bookingRepository.findByUserIdAndStatusForUpdate(USER_ID, BookingStatus.PENDING)).thenReturn(Optional.empty());
         when(seatReservationRepository.findByShowtimeIdAndSeatId(SHOWTIME_ID, 11L)).thenReturn(Optional.empty());
 
         seatHoldService.holdSeat(USER_ID, SHOWTIME_ID, 11L);
@@ -245,7 +245,7 @@ class SeatHoldServiceTest {
     @Test
     void seatHeldByAnotherUserIsRejected() {
         SeatReservation otherUserReservation = reservation(11L, OTHER_USER_ID, 200L);
-        when(bookingRepository.findFirstByUserIdAndStatus(USER_ID, BookingStatus.PENDING)).thenReturn(Optional.empty());
+        when(bookingRepository.findByUserIdAndStatusForUpdate(USER_ID, BookingStatus.PENDING)).thenReturn(Optional.empty());
         when(seatReservationRepository.findByShowtimeIdAndSeatId(SHOWTIME_ID, 11L))
                 .thenReturn(Optional.of(otherUserReservation));
 
@@ -258,7 +258,7 @@ class SeatHoldServiceTest {
 
     @Test
     void uniqueConstraintViolationFromRaceIsReportedAsSeatAlreadyHeld() {
-        when(bookingRepository.findFirstByUserIdAndStatus(USER_ID, BookingStatus.PENDING)).thenReturn(Optional.empty());
+        when(bookingRepository.findByUserIdAndStatusForUpdate(USER_ID, BookingStatus.PENDING)).thenReturn(Optional.empty());
         when(seatReservationRepository.findByShowtimeIdAndSeatId(SHOWTIME_ID, 11L)).thenReturn(Optional.empty());
         when(seatReservationRepository.saveAndFlush(any(SeatReservation.class))).thenThrow(
                 new DataIntegrityViolationException("x", new RuntimeException("violates unique constraint \"uq_showtime_seat\"")));
@@ -273,7 +273,7 @@ class SeatHoldServiceTest {
     @Test
     void pendingBookingOfAnotherShowtimeBlocksNewHold() {
         Booking otherShowtimeBooking = booking(300L, 99L, NOW.plusSeconds(300));
-        when(bookingRepository.findFirstByUserIdAndStatus(USER_ID, BookingStatus.PENDING))
+        when(bookingRepository.findByUserIdAndStatusForUpdate(USER_ID, BookingStatus.PENDING))
                 .thenReturn(Optional.of(otherShowtimeBooking));
 
         AppException appException =
@@ -288,7 +288,7 @@ class SeatHoldServiceTest {
         for (long seatId = 1; seatId <= 8; seatId++) {
             storedSeatReservations.add(reservation(seatId, USER_ID, 100L));
         }
-        when(bookingRepository.findFirstByUserIdAndStatus(USER_ID, BookingStatus.PENDING))
+        when(bookingRepository.findByUserIdAndStatusForUpdate(USER_ID, BookingStatus.PENDING))
                 .thenReturn(Optional.of(pendingBooking));
         when(seatReservationRepository.findByShowtimeIdAndSeatId(SHOWTIME_ID, 11L)).thenReturn(Optional.empty());
 
@@ -332,7 +332,7 @@ class SeatHoldServiceTest {
         Booking pendingBooking = booking(100L, SHOWTIME_ID, NOW.plusSeconds(300));
         when(seatReservationRepository.findByShowtimeIdAndSeatId(SHOWTIME_ID, 11L))
                 .thenReturn(Optional.of(ownReservation));
-        when(bookingRepository.findById(100L)).thenReturn(Optional.of(pendingBooking));
+        when(bookingRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(pendingBooking));
 
         SeatHoldResponse seatHoldResponse = seatHoldService.releaseSeat(USER_ID, SHOWTIME_ID, 11L);
 
@@ -342,6 +342,52 @@ class SeatHoldServiceTest {
         TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
         verify(seatStatusBroadcaster)
                 .broadcast(eq(SHOWTIME_ID), eq(List.of(new SeatStateChange(11L, SeatAvailability.AVAILABLE))));
+    }
+
+    @Test
+    void seatPriceIsFrozenOnTheReservationWhenItIsHeld() {
+        when(bookingRepository.findByUserIdAndStatusForUpdate(USER_ID, BookingStatus.PENDING)).thenReturn(Optional.empty());
+        when(seatReservationRepository.findByShowtimeIdAndSeatId(SHOWTIME_ID, 11L)).thenReturn(Optional.empty());
+
+        seatHoldService.holdSeat(USER_ID, SHOWTIME_ID, 11L);
+
+        assertEquals(new BigDecimal("100000"), storedSeatReservations.get(0).getPrice());
+    }
+
+    @Test
+    void holdingASeatWhoseHolderExpiredExpiresThatWholeBookingAndTakesTheSeat() {
+        SeatReservation expiredSeatReservation = reservation(11L, OTHER_USER_ID, 200L);
+        expiredSeatReservation.setExpiresAt(NOW.minusSeconds(1));
+        Booking holderBooking = booking(200L, SHOWTIME_ID, NOW.minusSeconds(1));
+        holderBooking.setUserId(OTHER_USER_ID);
+        when(bookingRepository.findByUserIdAndStatusForUpdate(USER_ID, BookingStatus.PENDING)).thenReturn(Optional.empty());
+        when(bookingRepository.findByIdForUpdate(200L)).thenReturn(Optional.of(holderBooking));
+        when(seatReservationRepository.findByBookingIdOrderBySeatId(200L)).thenReturn(List.of(expiredSeatReservation));
+        when(seatReservationRepository.findByShowtimeIdAndSeatId(SHOWTIME_ID, 11L)).thenReturn(
+                Optional.of(expiredSeatReservation), Optional.of(expiredSeatReservation), Optional.empty());
+
+        SeatHoldResponse seatHoldResponse = seatHoldService.holdSeat(USER_ID, SHOWTIME_ID, 11L);
+
+        assertEquals(BookingStatus.EXPIRED, holderBooking.getStatus());
+        verify(seatReservationRepository).deleteAllInBatch(List.of(expiredSeatReservation));
+        assertEquals(1, seatHoldResponse.seats().size());
+        assertEquals(USER_ID, storedSeatReservations.get(0).getUserId());
+    }
+
+    @Test
+    void releasingASeatOfABookingThatWasPaidInTheMeantimeChangesNothing() {
+        SeatReservation staleReservation = reservation(11L, USER_ID, 100L);
+        Booking paidBooking = booking(100L, SHOWTIME_ID, NOW.plusSeconds(300));
+        paidBooking.setStatus(BookingStatus.PAID);
+        when(seatReservationRepository.findByShowtimeIdAndSeatId(SHOWTIME_ID, 11L))
+                .thenReturn(Optional.of(staleReservation));
+        when(bookingRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(paidBooking));
+
+        SeatHoldResponse seatHoldResponse = seatHoldService.releaseSeat(USER_ID, SHOWTIME_ID, 11L);
+
+        verify(seatReservationRepository, never()).delete(any(SeatReservation.class));
+        assertEquals(BookingStatus.PAID, paidBooking.getStatus());
+        assertTrue(seatHoldResponse.seats().isEmpty());
     }
 
     private void stubShowtimeStartingAt(Instant startTime) {

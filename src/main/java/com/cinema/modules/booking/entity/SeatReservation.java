@@ -13,6 +13,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 @Getter
@@ -41,6 +42,9 @@ public class SeatReservation {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 50)
     private SeatReservationStatus status = SeatReservationStatus.HELD;
+
+    @Column(name = "price", precision = 12, scale = 2)
+    private BigDecimal price;
 
     @Column(name = "reserved_at", nullable = false)
     private Instant reservedAt;

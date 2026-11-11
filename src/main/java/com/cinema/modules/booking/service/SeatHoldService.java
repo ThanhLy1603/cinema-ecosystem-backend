@@ -38,6 +38,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -122,7 +123,7 @@ public class SeatHoldService implements ISeatHoldService {
     @Override
     public void cancelPendingBooking(Long userId) {
         transactionTemplate.executeWithoutResult(transactionStatus -> bookingRepository
-                .findFirstByUserIdAndStatus(userId, BookingStatus.PENDING)
+                .findByUserIdAndStatusForUpdate(userId, BookingStatus.PENDING)
                 .ifPresent(booking -> closeBooking(booking, BookingStatus.CANCELLED)));
     }
 
@@ -134,9 +135,7 @@ public class SeatHoldService implements ISeatHoldService {
             Instant now) {
         Long showtimeId = showtimeInfoResponse.id();
         Long seatId = seatPricingInfoResponse.seatId();
-        seatReservationRepository.deleteExpiredHold(showtimeId, seatId, SeatReservationStatus.HELD, now);
-        SeatReservation existingSeatReservation =
-                seatReservationRepository.findByShowtimeIdAndSeatId(showtimeId, seatId).orElse(null);
+        SeatReservation existingSeatReservation = releaseExpiredHolder(showtimeId, seatId, now);
         Instant bookingCutoff = BookingWindow.lastBookableMoment(
                 showtimeInfoResponse.startTime(), bookingPolicyProperties.lateBookingWindow());
         Booking booking = findOrCreateBooking(userId, showtimeId, cinemaId, now, bookingCutoff);
@@ -161,6 +160,7 @@ public class SeatHoldService implements ISeatHoldService {
         seatReservation.setUserId(userId);
         seatReservation.setBookingId(booking.getId());
         seatReservation.setStatus(SeatReservationStatus.HELD);
+        seatReservation.setPrice(resolveSeatPrice(showtimeInfoResponse, seatPricingInfoResponse));
         seatReservation.setReservedAt(now);
         seatReservation.setExpiresAt(booking.getExpiresAt());
         seatReservationRepository.saveAndFlush(seatReservation);
@@ -179,7 +179,10 @@ public class SeatHoldService implements ISeatHoldService {
         if (!seatReservation.getUserId().equals(userId)) {
             throw new AppException("Ghế này không do bạn giữ", HttpStatus.FORBIDDEN, "SEAT_NOT_HELD_BY_YOU");
         }
-        Booking booking = bookingRepository.findById(seatReservation.getBookingId()).orElseThrow();
+        Booking booking = bookingRepository.findByIdForUpdate(seatReservation.getBookingId()).orElseThrow();
+        if (booking.getStatus() != BookingStatus.PENDING) {
+            return getMyHoldInTransaction(userId, showtimeId, now);
+        }
         seatReservationRepository.delete(seatReservation);
         seatReservationRepository.flush();
         broadcastAfterCommit(showtimeId, List.of(new SeatStateChange(seatId, SeatAvailability.AVAILABLE)));
@@ -204,7 +207,7 @@ public class SeatHoldService implements ISeatHoldService {
     private Booking findOrCreateBooking(
             Long userId, Long showtimeId, Long cinemaId, Instant now, Instant bookingCutoff) {
         Booking pendingBooking =
-                bookingRepository.findFirstByUserIdAndStatus(userId, BookingStatus.PENDING).orElse(null);
+                bookingRepository.findByUserIdAndStatusForUpdate(userId, BookingStatus.PENDING).orElse(null);
         if (pendingBooking != null && !pendingBooking.getExpiresAt().isAfter(now)) {
             closeBooking(pendingBooking, BookingStatus.EXPIRED);
             pendingBooking = null;
@@ -256,16 +259,17 @@ public class SeatHoldService implements ISeatHoldService {
     }
 
     private SeatHoldResponse toSeatHoldResponse(Booking booking, Instant now) {
-        List<Long> seatIds = seatReservationRepository.findByBookingIdOrderBySeatId(booking.getId()).stream()
-                .map(SeatReservation::getSeatId)
-                .toList();
-        Map<Long, SeatPricingInfoResponse> seatPricingInfoResponses = cinemaQueryService.findSeatPricingInfos(seatIds);
-        Map<String, BigDecimal> seatPricesByType = dynamicPricingService.getShowtimePrices(booking.getShowtimeId())
-                .seatTypePrices().stream()
-                .collect(Collectors.toMap(SeatTypePriceResponse::seatTypeCode, SeatTypePriceResponse::totalPrice));
-        List<HeldSeatResponse> heldSeatResponses = seatIds.stream()
-                .map(seatId -> new HeldSeatResponse(
-                        seatId, seatPricesByType.get(seatPricingInfoResponses.get(seatId).seatTypeCode())))
+        List<SeatReservation> seatReservations = seatReservationRepository.findByBookingIdOrderBySeatId(booking.getId());
+        Map<Long, BigDecimal> fallbackPricesBySeatId = seatReservations.stream()
+                .anyMatch(seatReservation -> seatReservation.getPrice() == null)
+                ? findFallbackSeatPrices(booking.getShowtimeId(), seatReservations)
+                : Map.of();
+        List<HeldSeatResponse> heldSeatResponses = seatReservations.stream()
+                .map(seatReservation -> new HeldSeatResponse(
+                        seatReservation.getSeatId(),
+                        seatReservation.getPrice() != null
+                                ? seatReservation.getPrice()
+                                : fallbackPricesBySeatId.get(seatReservation.getSeatId())))
                 .toList();
         BigDecimal totalAmount = heldSeatResponses.stream()
                 .map(HeldSeatResponse::price)
@@ -278,6 +282,60 @@ public class SeatHoldService implements ISeatHoldService {
                 now,
                 heldSeatResponses,
                 totalAmount);
+    }
+
+    private Map<Long, BigDecimal> findFallbackSeatPrices(Long showtimeId, List<SeatReservation> seatReservations) {
+        Map<Long, SeatPricingInfoResponse> seatPricingInfoResponses = cinemaQueryService.findSeatPricingInfos(
+                seatReservations.stream().map(SeatReservation::getSeatId).toList());
+        Map<String, BigDecimal> seatPricesByType = findSeatPricesByType(showtimeId);
+        Map<Long, BigDecimal> fallbackPricesBySeatId = new HashMap<>();
+        for (SeatReservation seatReservation : seatReservations) {
+            fallbackPricesBySeatId.put(
+                    seatReservation.getSeatId(),
+                    seatPricesByType.get(seatPricingInfoResponses.get(seatReservation.getSeatId()).seatTypeCode()));
+        }
+        return fallbackPricesBySeatId;
+    }
+
+    private Map<String, BigDecimal> findSeatPricesByType(Long showtimeId) {
+        return dynamicPricingService.getShowtimePrices(showtimeId).seatTypePrices().stream()
+                .collect(Collectors.toMap(SeatTypePriceResponse::seatTypeCode, SeatTypePriceResponse::totalPrice));
+    }
+
+    private BigDecimal resolveSeatPrice(
+            ShowtimeInfoResponse showtimeInfoResponse, SeatPricingInfoResponse seatPricingInfoResponse) {
+        BigDecimal seatPrice = findSeatPricesByType(showtimeInfoResponse.id()).get(seatPricingInfoResponse.seatTypeCode());
+        return seatPrice != null
+                ? seatPrice
+                : showtimeInfoResponse.basePrice().add(seatPricingInfoResponse.surcharge());
+    }
+
+    private SeatReservation releaseExpiredHolder(Long showtimeId, Long seatId, Instant now) {
+        SeatReservation seatReservation =
+                seatReservationRepository.findByShowtimeIdAndSeatId(showtimeId, seatId).orElse(null);
+        if (!isExpiredHold(seatReservation, now)) {
+            return seatReservation;
+        }
+        Booking holderBooking = seatReservation.getBookingId() == null
+                ? null
+                : bookingRepository.findByIdForUpdate(seatReservation.getBookingId()).orElse(null);
+        SeatReservation currentSeatReservation =
+                seatReservationRepository.findByShowtimeIdAndSeatId(showtimeId, seatId).orElse(null);
+        if (!isExpiredHold(currentSeatReservation, now)) {
+            return currentSeatReservation;
+        }
+        if (holderBooking != null && holderBooking.getStatus() == BookingStatus.PENDING) {
+            closeBooking(holderBooking, BookingStatus.EXPIRED);
+        } else {
+            seatReservationRepository.deleteHeldByIds(List.of(currentSeatReservation.getId()), SeatReservationStatus.HELD);
+        }
+        return seatReservationRepository.findByShowtimeIdAndSeatId(showtimeId, seatId).orElse(null);
+    }
+
+    private boolean isExpiredHold(SeatReservation seatReservation, Instant now) {
+        return seatReservation != null
+                && seatReservation.getStatus() == SeatReservationStatus.HELD
+                && !seatReservation.getExpiresAt().isAfter(now);
     }
 
     private SeatHoldResponse emptyHold(Long showtimeId, Instant now) {

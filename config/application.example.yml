@@ -13,3 +13,10 @@ app:
     cloud-name: your-cloud-name
     api-key: your-api-key
     api-secret: your-api-secret
+  payment:
+    vnpay:
+      tmn-code: <TmnCode của VNPay Sandbox, hoặc SIMULATOR khi dùng cổng giả lập>
+      hash-secret: <HashSecret của VNPay Sandbox, hoặc chuỗi ngẫu nhiên tạo bằng: openssl rand -hex 24>
+      pay-url: https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
+      return-url: http://localhost:3000/payment/result
+      simulator-enabled: false

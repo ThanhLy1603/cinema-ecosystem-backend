@@ -2,6 +2,7 @@ package com.cinema.modules.cinema.service;
 
 import com.cinema.modules.cinema.dto.response.CinemaOptionResponse;
 import com.cinema.modules.cinema.dto.response.HallInfoResponse;
+import com.cinema.modules.cinema.dto.response.SeatLabelInfoResponse;
 import com.cinema.modules.cinema.dto.response.SeatPricingInfoResponse;
 import com.cinema.modules.cinema.dto.response.SeatTypeSurchargeResponse;
 import com.cinema.modules.cinema.enums.HallStatus;
@@ -147,6 +148,29 @@ public class CinemaQueryService implements ICinemaQueryService {
                     seatPricingInfoResponses.put(seatPricingInfoResponse.seatId(), seatPricingInfoResponse);
                 });
         return seatPricingInfoResponses;
+    }
+
+    @Override
+    public Map<Long, SeatLabelInfoResponse> findSeatLabelInfos(Collection<Long> seatIds) {
+        Map<Long, SeatLabelInfoResponse> seatLabelInfoResponses = new HashMap<>();
+        if (seatIds == null || seatIds.isEmpty()) {
+            return seatLabelInfoResponses;
+        }
+        namedParameterJdbcTemplate.query(
+                "select seat.id, seat.seat_row, seat.seat_number, seat_type.code, seat_type.name "
+                        + "from seats seat join seat_types seat_type on seat_type.id = seat.seat_type_id "
+                        + "where seat.id in (:seatIds)",
+                new MapSqlParameterSource("seatIds", seatIds),
+                resultSet -> {
+                    SeatLabelInfoResponse seatLabelInfoResponse = new SeatLabelInfoResponse(
+                            resultSet.getLong("id"),
+                            resultSet.getString("seat_row"),
+                            resultSet.getInt("seat_number"),
+                            resultSet.getString("code"),
+                            resultSet.getString("name"));
+                    seatLabelInfoResponses.put(seatLabelInfoResponse.seatId(), seatLabelInfoResponse);
+                });
+        return seatLabelInfoResponses;
     }
 
     @Override

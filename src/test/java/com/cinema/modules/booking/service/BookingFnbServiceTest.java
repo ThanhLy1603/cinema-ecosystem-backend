@@ -64,6 +64,9 @@ class BookingFnbServiceTest {
     private ISeatHoldService seatHoldService;
 
     @Mock
+    private SeatGapChecker seatGapChecker;
+
+    @Mock
     private PlatformTransactionManager platformTransactionManager;
 
     private final List<BookingFnbDetail> storedBookingFnbDetails = new ArrayList<>();
@@ -77,6 +80,7 @@ class BookingFnbServiceTest {
                 bookingFnbDetailRepository,
                 fnbQueryService,
                 seatHoldService,
+                seatGapChecker,
                 new TransactionTemplate(platformTransactionManager),
                 Clock.fixed(NOW, ZoneOffset.UTC));
         booking = new Booking();
@@ -130,6 +134,20 @@ class BookingFnbServiceTest {
         assertNull(storedBookingFnbDetails.get(0).getItemId());
         assertEquals(BOOKING_ID, storedBookingFnbDetails.get(1).getBookingId());
         verify(bookingFnbDetailRepository).deleteAllByBookingId(BOOKING_ID);
+    }
+
+    @Test
+    void replaceIsRejectedWhenTheSeatsLeaveAnOrphanSeatAndTouchesNothing() {
+        when(bookingRepository.findByUserIdAndStatusForUpdate(USER_ID, BookingStatus.PENDING))
+                .thenReturn(Optional.of(booking));
+        org.mockito.Mockito.doThrow(new AppException("gap", HttpStatus.CONFLICT, "SEAT_GAP_LEFT"))
+                .when(seatGapChecker).validateNoOrphanSeats(booking, NOW);
+
+        AppException appException = assertThrows(AppException.class,
+                () -> bookingFnbService.replacePendingFnb(USER_ID, new BookingFnbRequest(List.of())));
+
+        assertEquals("SEAT_GAP_LEFT", appException.getErrorCode());
+        verify(bookingFnbDetailRepository, never()).deleteAllByBookingId(anyLong());
     }
 
     @Test

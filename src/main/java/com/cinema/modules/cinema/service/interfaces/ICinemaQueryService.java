@@ -2,6 +2,7 @@ package com.cinema.modules.cinema.service.interfaces;
 
 import com.cinema.modules.cinema.dto.response.CinemaOptionResponse;
 import com.cinema.modules.cinema.dto.response.HallInfoResponse;
+import com.cinema.modules.cinema.dto.response.SeatLabelInfoResponse;
 import com.cinema.modules.cinema.dto.response.SeatPricingInfoResponse;
 import com.cinema.modules.cinema.dto.response.SeatTypeSurchargeResponse;
 
@@ -27,6 +28,8 @@ public interface ICinemaQueryService {
     Map<Long, Integer> countBookableSeatsByHall(Collection<Long> hallIds);
 
     Map<Long, SeatPricingInfoResponse> findSeatPricingInfos(Collection<Long> seatIds);
+
+    Map<Long, SeatLabelInfoResponse> findSeatLabelInfos(Collection<Long> seatIds);
 
     List<SeatTypeSurchargeResponse> findSeatTypeSurcharges();
 }

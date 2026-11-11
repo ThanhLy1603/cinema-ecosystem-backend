@@ -5,6 +5,7 @@ import com.cinema.modules.auth.enums.UserStatus;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -36,4 +37,11 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
             where role.code = :roleCode and user.status = :status
             """)
     long countByRoleCodeAndStatus(@Param("roleCode") String roleCode, @Param("status") UserStatus status);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update User user set user.loyaltyPoints = user.loyaltyPoints + :points where user.id = :userId")
+    int addLoyaltyPoints(@Param("userId") Long userId, @Param("points") int points);
+
+    @Query("select user.loyaltyPoints from User user where user.id = :userId")
+    Optional<Integer> findLoyaltyPointsById(@Param("userId") Long userId);
 }

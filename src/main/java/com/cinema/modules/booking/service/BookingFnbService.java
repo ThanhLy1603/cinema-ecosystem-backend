@@ -34,6 +34,7 @@ public class BookingFnbService implements IBookingFnbService {
     private final BookingFnbDetailRepository bookingFnbDetailRepository;
     private final IFnbQueryService fnbQueryService;
     private final ISeatHoldService seatHoldService;
+    private final SeatGapChecker seatGapChecker;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
@@ -42,12 +43,14 @@ public class BookingFnbService implements IBookingFnbService {
             BookingFnbDetailRepository bookingFnbDetailRepository,
             IFnbQueryService fnbQueryService,
             ISeatHoldService seatHoldService,
+            SeatGapChecker seatGapChecker,
             TransactionTemplate transactionTemplate,
             Clock clock) {
         this.bookingRepository = bookingRepository;
         this.bookingFnbDetailRepository = bookingFnbDetailRepository;
         this.fnbQueryService = fnbQueryService;
         this.seatHoldService = seatHoldService;
+        this.seatGapChecker = seatGapChecker;
         this.transactionTemplate = transactionTemplate;
         this.clock = clock;
     }
@@ -76,6 +79,7 @@ public class BookingFnbService implements IBookingFnbService {
                 .filter(pendingBooking -> pendingBooking.getExpiresAt().isAfter(now))
                 .orElseThrow(() -> new AppException(
                         "Bạn chưa giữ ghế hoặc đã hết thời gian giữ ghế", HttpStatus.CONFLICT, "NO_PENDING_BOOKING"));
+        seatGapChecker.validateNoOrphanSeats(booking, now);
         List<BookingFnbDetail> bookingFnbDetails = buildDetails(booking.getId(), bookingFnbRequest.lines());
         bookingFnbDetailRepository.deleteAllByBookingId(booking.getId());
         bookingFnbDetailRepository.saveAll(bookingFnbDetails);
@@ -137,15 +141,24 @@ public class BookingFnbService implements IBookingFnbService {
         return bookingFnbDetail;
     }
 
-    private BookingFnbResponse toBookingFnbResponse(
-            Long userId, Booking booking, List<BookingFnbDetail> bookingFnbDetails, Instant now) {
+    @Override
+    public List<BookingFnbLineResponse> findFnbLines(Long bookingId) {
+        return toBookingFnbLineResponses(bookingFnbDetailRepository.findByBookingIdOrderByIdAsc(bookingId));
+    }
+
+    private List<BookingFnbLineResponse> toBookingFnbLineResponses(List<BookingFnbDetail> bookingFnbDetails) {
         Map<Long, FnbProductInfoResponse> comboInfos = fnbQueryService.findComboInfos(
                 bookingFnbDetails.stream().map(BookingFnbDetail::getComboId).filter(Objects::nonNull).toList());
         Map<Long, FnbProductInfoResponse> itemInfos = fnbQueryService.findItemInfos(
                 bookingFnbDetails.stream().map(BookingFnbDetail::getItemId).filter(Objects::nonNull).toList());
-        List<BookingFnbLineResponse> bookingFnbLineResponses = bookingFnbDetails.stream()
+        return bookingFnbDetails.stream()
                 .map(bookingFnbDetail -> toBookingFnbLineResponse(bookingFnbDetail, comboInfos, itemInfos))
                 .toList();
+    }
+
+    private BookingFnbResponse toBookingFnbResponse(
+            Long userId, Booking booking, List<BookingFnbDetail> bookingFnbDetails, Instant now) {
+        List<BookingFnbLineResponse> bookingFnbLineResponses = toBookingFnbLineResponses(bookingFnbDetails);
         BigDecimal fnbAmount = bookingFnbLineResponses.stream()
                 .map(BookingFnbLineResponse::lineAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);

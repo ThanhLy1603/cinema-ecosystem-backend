@@ -43,6 +43,10 @@ public class SecurityConfig {
             "/api/v1/showtimes/**"
     };
 
+    private static final String[] PUBLIC_GATEWAY_CALLBACK_ENDPOINTS = {
+            "/api/v1/payments/vnpay-ipn"
+    };
+
     private static final String[] PUBLIC_ENDPOINTS = {
             "/ws/**",
             "/actuator/**"
@@ -77,6 +81,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, PUBLIC_AUTH_ENDPOINTS).permitAll()
                         .requestMatchers(HttpMethod.GET, PUBLIC_READ_ENDPOINTS).permitAll()
+                        .requestMatchers(HttpMethod.GET, PUBLIC_GATEWAY_CALLBACK_ENDPOINTS).permitAll()
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                         .requestMatchers("/api/v1/admin/**").hasAnyAuthority(Role.ADMIN, Role.MANAGER)
                         .requestMatchers("/api/v1/staff/**").hasAnyAuthority(Role.STAFF, Role.MANAGER, Role.ADMIN)

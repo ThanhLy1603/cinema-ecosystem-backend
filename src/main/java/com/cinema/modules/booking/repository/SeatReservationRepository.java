@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,11 +24,16 @@ public interface SeatReservationRepository extends JpaRepository<SeatReservation
 
     @Modifying
     @Query("delete from SeatReservation seatReservation "
-            + "where seatReservation.showtimeId = :showtimeId and seatReservation.seatId = :seatId "
-            + "and seatReservation.status = :heldStatus and seatReservation.expiresAt < :now")
-    int deleteExpiredHold(
-            @Param("showtimeId") Long showtimeId,
-            @Param("seatId") Long seatId,
+            + "where seatReservation.id in :seatReservationIds and seatReservation.status = :heldStatus")
+    int deleteHeldByIds(
+            @Param("seatReservationIds") Collection<Long> seatReservationIds,
+            @Param("heldStatus") SeatReservationStatus heldStatus);
+
+    @Modifying
+    @Query("update SeatReservation seatReservation set seatReservation.status = :bookedStatus "
+            + "where seatReservation.bookingId = :bookingId and seatReservation.status = :heldStatus")
+    int markBookedByBookingId(
+            @Param("bookingId") Long bookingId,
             @Param("heldStatus") SeatReservationStatus heldStatus,
-            @Param("now") Instant now);
+            @Param("bookedStatus") SeatReservationStatus bookedStatus);
 }

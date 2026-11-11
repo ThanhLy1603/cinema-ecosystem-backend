@@ -55,4 +55,7 @@ public class Booking extends BaseEntity {
 
     @Column(name = "expires_at")
     private Instant expiresAt;
+
+    @Column(name = "qr_code", length = 100)
+    private String qrCode;
 }
