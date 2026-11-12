@@ -37,6 +37,7 @@ public class SecurityConfig {
     private static final String[] PUBLIC_READ_ENDPOINTS = {
             "/api/v1/movies/**",
             "/api/v1/fnb/**",
+            "/api/v1/promotions/**",
             "/api/v1/cinemas/**",
             "/api/v1/halls/**",
             "/api/v1/seat-types/**",
