@@ -5,4 +5,6 @@ import java.math.BigDecimal;
 public interface ILoyaltyService {
 
     int earnPointsForBooking(Long userId, Long bookingId, BigDecimal paidAmount);
+
+    int revokePointsForBooking(Long userId, Long bookingId);
 }

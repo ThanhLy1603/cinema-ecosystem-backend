@@ -12,4 +12,6 @@ public interface IBookingDetailService {
     List<BookingDetailResponse> findMyBookings(Long userId);
 
     Optional<BookingDetailResponse> findBookingDetail(Long bookingId);
+
+    Optional<BookingDetailResponse> findBookingDetailByCode(String bookingCode);
 }

@@ -20,6 +20,7 @@ import com.cinema.modules.payment.entity.Payment;
 import com.cinema.modules.payment.enums.PaymentMethod;
 import com.cinema.modules.payment.enums.PaymentStatus;
 import com.cinema.modules.payment.repository.PaymentRepository;
+import com.cinema.modules.audit.service.interfaces.IAuditLogService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -55,6 +56,9 @@ class CounterPaymentServiceTest {
     private static final Long BOOKING_ID = 100L;
 
     @Mock
+    private IAuditLogService auditLogService;
+
+    @Mock
     private PaymentRepository paymentRepository;
 
     @Mock
@@ -83,6 +87,7 @@ class CounterPaymentServiceTest {
                 branchAccessService,
                 userQueryService,
                 applicationEventPublisher,
+                auditLogService,
                 Clock.fixed(NOW, ZoneOffset.UTC));
         lenient().when(bookingSettlementService.requirePayableBooking(STAFF_USER_ID)).thenReturn(
                 new PayableBookingResponse(BOOKING_ID, "BK123", CINEMA_ID, new BigDecimal("180000.00"), NOW.plusSeconds(600)));

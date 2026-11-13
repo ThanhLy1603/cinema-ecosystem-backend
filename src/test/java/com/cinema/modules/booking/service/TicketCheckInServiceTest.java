@@ -27,6 +27,8 @@ import com.cinema.modules.payment.enums.PaymentMethod;
 import com.cinema.modules.payment.service.interfaces.IPaymentQueryService;
 import com.cinema.modules.cinema.enums.ScreenType;
 import com.cinema.modules.movie.enums.AgeRating;
+import com.cinema.modules.audit.service.interfaces.IAuditLogService;
+import com.cinema.modules.audit.enums.AuditAction;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -56,6 +58,8 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -69,6 +73,12 @@ class TicketCheckInServiceTest {
     private static final Long CINEMA_ID = 1L;
     private static final Long BOOKING_ID = 100L;
     private static final String QR_CODE = "QRABCDEFGHJKLMNPQRSTUVWX";
+
+    @Mock
+    private ScanGuard scanGuard;
+
+    @Mock
+    private IAuditLogService auditLogService;
 
     @Mock
     private BookingRepository bookingRepository;
@@ -126,6 +136,8 @@ class TicketCheckInServiceTest {
                 userQueryService,
                 fnbQueryService,
                 paymentQueryService,
+                scanGuard,
+                auditLogService,
                 mutableClock);
         booking = new Booking();
         booking.setId(BOOKING_ID);
@@ -181,6 +193,42 @@ class TicketCheckInServiceTest {
         assertEquals(CheckInResultCode.NOT_FOUND, ticketScanResponse.resultCode());
         assertFalse(ticketScanResponse.canCheckIn());
         assertNull(ticketScanResponse.booking());
+    }
+
+    @Test
+    void scanRegistersUnknownCodeWithGuard() {
+        scan("QRUNKNOWN");
+
+        verify(scanGuard).assertScanAllowed(STAFF_USER_ID, CINEMA_ID, "CHECK_IN");
+        verify(scanGuard).registerUnknownCode(STAFF_USER_ID, CINEMA_ID, "CHECK_IN", "QRUNKNOWN");
+    }
+
+    @Test
+    void scanDoesNotRegisterUnknownCodeForKnownBooking() {
+        scan(QR_CODE);
+
+        verify(scanGuard, never()).registerUnknownCode(anyLong(), anyLong(), anyString(), anyString());
+    }
+
+    @Test
+    void scanStopsWhenGuardRejectsTooManyScans() {
+        doThrow(new AppException("Quét quá nhiều", HttpStatus.TOO_MANY_REQUESTS, "SCAN_RATE_LIMITED"))
+                .when(scanGuard).assertScanAllowed(STAFF_USER_ID, CINEMA_ID, "CHECK_IN");
+
+        AppException appException = assertThrows(AppException.class, () -> scan(QR_CODE));
+
+        assertEquals("SCAN_RATE_LIMITED", appException.getErrorCode());
+        verify(ticketScanLogRepository, never()).save(any());
+    }
+
+    @Test
+    void undoWritesAuditLog() {
+        tickets.forEach(ticket -> ticket.setCheckedIn(true));
+
+        ticketCheckInService.undoCheckIn(STAFF_USER_ID, new TicketUndoRequest(QR_CODE, CINEMA_ID, List.of(2L)));
+
+        verify(auditLogService).record(
+                eq(STAFF_USER_ID), eq(CINEMA_ID), eq(AuditAction.UNDO_CHECK_IN), eq("BOOKING"), any(), any());
     }
 
     @Test

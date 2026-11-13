@@ -80,6 +80,9 @@ class FnbPickupServiceTest {
     private static final String QR_CODE = "QRABCDEFGHJKLMNPQRSTUVWX";
 
     @Mock
+    private ScanGuard scanGuard;
+
+    @Mock
     private BookingRepository bookingRepository;
 
     @Mock
@@ -144,6 +147,7 @@ class FnbPickupServiceTest {
                 showtimeQueryService,
                 movieQueryService,
                 cinemaQueryService,
+                scanGuard,
                 mutableClock);
         booking = new Booking();
         booking.setId(BOOKING_ID);

@@ -9,6 +9,7 @@ import com.cinema.modules.booking.dto.response.BookingFnbLineResponse;
 import com.cinema.modules.booking.dto.response.BookingTicketResponse;
 import com.cinema.modules.booking.event.BookingPaidEvent;
 import com.cinema.modules.booking.event.CounterReceiptEmailRequestedEvent;
+import com.cinema.modules.booking.event.TicketReissuedEvent;
 import com.cinema.modules.booking.service.interfaces.IBookingDetailService;
 import com.cinema.modules.booking.service.interfaces.ITicketMailService;
 import jakarta.mail.MessagingException;
@@ -80,6 +81,18 @@ public class TicketMailService implements ITicketMailService {
         } catch (MailException | MessagingException exception) {
             log.warn("Không gửi được email vé cho đơn {}", bookingPaidEvent.bookingCode(), exception);
         }
+    }
+
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    @Override
+    public void onTicketReissued(TicketReissuedEvent ticketReissuedEvent) {
+        bookingDetailService.findBookingDetail(ticketReissuedEvent.bookingId())
+                .ifPresent(bookingDetailResponse -> onBookingPaid(new BookingPaidEvent(
+                        ticketReissuedEvent.bookingId(),
+                        ticketReissuedEvent.userId(),
+                        ticketReissuedEvent.bookingCode(),
+                        bookingDetailResponse.finalAmount())));
     }
 
     @Async

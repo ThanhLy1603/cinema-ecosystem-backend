@@ -1,6 +1,8 @@
 package com.cinema.modules.booking.service;
 
 import com.cinema.common.exception.AppException;
+import com.cinema.modules.audit.enums.AuditAction;
+import com.cinema.modules.audit.service.interfaces.IAuditLogService;
 import com.cinema.modules.auth.dto.response.UserContactResponse;
 import com.cinema.modules.auth.service.interfaces.IBranchAccessService;
 import com.cinema.modules.auth.service.interfaces.IUserQueryService;
@@ -53,6 +55,7 @@ import java.util.stream.Collectors;
 @Service
 public class TicketCheckInService implements ITicketCheckInService {
 
+    private static final String SCAN_CHANNEL = "CHECK_IN";
     static final Duration EARLY_ENTRY_WINDOW = Duration.ofMinutes(60);
     private static final int HISTORY_LIMIT = 50;
     private static final List<CheckInResultCode> HISTORY_RESULT_CODES =
@@ -68,6 +71,8 @@ public class TicketCheckInService implements ITicketCheckInService {
     private final IUserQueryService userQueryService;
     private final IFnbQueryService fnbQueryService;
     private final IPaymentQueryService paymentQueryService;
+    private final ScanGuard scanGuard;
+    private final IAuditLogService auditLogService;
     private final Clock clock;
 
     public TicketCheckInService(
@@ -79,6 +84,8 @@ public class TicketCheckInService implements ITicketCheckInService {
             IUserQueryService userQueryService,
             IFnbQueryService fnbQueryService,
             IPaymentQueryService paymentQueryService,
+            ScanGuard scanGuard,
+            IAuditLogService auditLogService,
             Clock clock) {
         this.bookingRepository = bookingRepository;
         this.ticketRepository = ticketRepository;
@@ -88,6 +95,8 @@ public class TicketCheckInService implements ITicketCheckInService {
         this.userQueryService = userQueryService;
         this.fnbQueryService = fnbQueryService;
         this.paymentQueryService = paymentQueryService;
+        this.scanGuard = scanGuard;
+        this.auditLogService = auditLogService;
         this.clock = clock;
     }
 
@@ -95,8 +104,12 @@ public class TicketCheckInService implements ITicketCheckInService {
     @Override
     public TicketScanResponse scan(Long staffUserId, TicketScanRequest ticketScanRequest) {
         assertStaffCanWorkAt(staffUserId, ticketScanRequest.cinemaId());
+        scanGuard.assertScanAllowed(staffUserId, ticketScanRequest.cinemaId(), SCAN_CHANNEL);
         String code = normalizeCode(ticketScanRequest.code());
         Optional<Booking> optionalBooking = findBooking(code);
+        if (optionalBooking.isEmpty()) {
+            scanGuard.registerUnknownCode(staffUserId, ticketScanRequest.cinemaId(), SCAN_CHANNEL, code);
+        }
         TicketScanResponse ticketScanResponse = optionalBooking
                 .map(booking -> evaluate(staffUserId, ticketScanRequest.cinemaId(), booking))
                 .orElseGet(this::notFound);
@@ -109,6 +122,7 @@ public class TicketCheckInService implements ITicketCheckInService {
     @Override
     public TicketScanResponse checkIn(Long staffUserId, TicketCheckInRequest ticketCheckInRequest) {
         assertStaffCanWorkAt(staffUserId, ticketCheckInRequest.cinemaId());
+        scanGuard.assertScanAllowed(staffUserId, ticketCheckInRequest.cinemaId(), SCAN_CHANNEL);
         String code = normalizeCode(ticketCheckInRequest.code());
         Optional<Booking> optionalBooking = findBooking(code);
         if (optionalBooking.isEmpty()) {
@@ -178,6 +192,8 @@ public class TicketCheckInService implements ITicketCheckInService {
         ticketRepository.saveAll(undoTickets);
         writeLog(staffUserId, ticketUndoRequest.cinemaId(), lockedBooking, code, TicketScanAction.UNDO,
                 CheckInResultCode.UNDONE, undoTickets.size());
+        auditLogService.record(staffUserId, ticketUndoRequest.cinemaId(), AuditAction.UNDO_CHECK_IN, "BOOKING",
+                lockedBooking.getBookingCode(), "Hoàn tác " + undoTickets.size() + " ghế đã vào rạp");
         TicketScanResponse refreshedResponse = evaluate(staffUserId, ticketUndoRequest.cinemaId(), lockedBooking);
         return new TicketScanResponse(
                 CheckInResultCode.UNDONE,
@@ -239,7 +255,7 @@ public class TicketCheckInService implements ITicketCheckInService {
         if (status == BookingStatus.CANCELLED) {
             return blocked(CheckInResultCode.CANCELLED, "Đơn đặt vé này đã bị hủy.", pendingTicketCount, scanBooking);
         }
-        if (status == BookingStatus.REFUND_REQUIRED) {
+        if (status == BookingStatus.REFUND_REQUIRED || status == BookingStatus.REFUNDED) {
             return blocked(CheckInResultCode.REFUNDED, "Đơn đặt vé này đã hoàn tiền hoặc đang chờ hoàn tiền.",
                     pendingTicketCount, scanBooking);
         }

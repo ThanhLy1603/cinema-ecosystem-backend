@@ -1,6 +1,8 @@
 package com.cinema.modules.payment.service;
 
 import com.cinema.common.exception.AppException;
+import com.cinema.modules.audit.enums.AuditAction;
+import com.cinema.modules.audit.service.interfaces.IAuditLogService;
 import com.cinema.modules.auth.dto.response.UserContactResponse;
 import com.cinema.modules.auth.service.interfaces.IBranchAccessService;
 import com.cinema.modules.auth.service.interfaces.IUserQueryService;
@@ -42,6 +44,7 @@ public class CounterPaymentService implements ICounterPaymentService {
     private final IBranchAccessService branchAccessService;
     private final IUserQueryService userQueryService;
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final IAuditLogService auditLogService;
     private final Clock clock;
 
     public CounterPaymentService(
@@ -51,6 +54,7 @@ public class CounterPaymentService implements ICounterPaymentService {
             IBranchAccessService branchAccessService,
             IUserQueryService userQueryService,
             ApplicationEventPublisher applicationEventPublisher,
+            IAuditLogService auditLogService,
             Clock clock) {
         this.paymentRepository = paymentRepository;
         this.bookingSettlementService = bookingSettlementService;
@@ -58,6 +62,7 @@ public class CounterPaymentService implements ICounterPaymentService {
         this.branchAccessService = branchAccessService;
         this.userQueryService = userQueryService;
         this.applicationEventPublisher = applicationEventPublisher;
+        this.auditLogService = auditLogService;
         this.clock = clock;
     }
 
@@ -106,8 +111,14 @@ public class CounterPaymentService implements ICounterPaymentService {
                     "COUNTER_SETTLEMENT_FAILED");
         }
         Instant now = Instant.now(clock);
+        String staffName = userQueryService.findContact(staffUserId).map(UserContactResponse::fullName).orElse(null);
+        String customerName = customerContactResponse == null ? null : customerContactResponse.fullName();
         paymentRepository.save(buildPayment(
-                payableBookingResponse, paymentMethod, staffUserId, cashReceived, changeAmount, now));
+                payableBookingResponse, paymentMethod, staffUserId, staffName, customerName,
+                cashReceived, changeAmount, now));
+        auditLogService.record(staffUserId, counterCheckoutRequest.cinemaId(), AuditAction.COUNTER_TICKET_SALE,
+                "BOOKING", payableBookingResponse.bookingCode(),
+                paymentMethod + " " + payableBookingResponse.finalAmount().toPlainString());
         if (counterCheckoutRequest.receiptEmail() != null && !counterCheckoutRequest.receiptEmail().isBlank()) {
             applicationEventPublisher.publishEvent(new CounterReceiptEmailRequestedEvent(
                     payableBookingResponse.bookingId(), counterCheckoutRequest.receiptEmail().trim()));
@@ -121,8 +132,8 @@ public class CounterPaymentService implements ICounterPaymentService {
                 paymentMethod,
                 cashReceived,
                 changeAmount,
-                userQueryService.findContact(staffUserId).map(UserContactResponse::fullName).orElse(null),
-                customerContactResponse == null ? null : customerContactResponse.fullName(),
+                staffName,
+                customerName,
                 now);
     }
 
@@ -130,12 +141,20 @@ public class CounterPaymentService implements ICounterPaymentService {
             PayableBookingResponse payableBookingResponse,
             PaymentMethod paymentMethod,
             Long staffUserId,
+            String staffName,
+            String customerName,
             BigDecimal cashReceived,
             BigDecimal changeAmount,
             Instant now) {
         Map<String, String> responseData = new HashMap<>();
         responseData.put("channel", "COUNTER");
         responseData.put("staffUserId", String.valueOf(staffUserId));
+        if (staffName != null) {
+            responseData.put("staffName", staffName);
+        }
+        if (customerName != null) {
+            responseData.put("customerName", customerName);
+        }
         if (cashReceived != null) {
             responseData.put("cashReceived", cashReceived.toPlainString());
             responseData.put("changeAmount", changeAmount.toPlainString());

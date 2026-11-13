@@ -5,12 +5,15 @@ import com.cinema.modules.auth.dto.response.CustomerLookupResponse;
 import com.cinema.modules.auth.security.AuthenticatedUser;
 import com.cinema.modules.auth.service.interfaces.IUserQueryService;
 import com.cinema.modules.payment.dto.request.CounterCheckoutRequest;
+import com.cinema.modules.payment.dto.response.CounterReceiptFileResponse;
 import com.cinema.modules.payment.dto.response.CounterReceiptResponse;
 import com.cinema.modules.payment.service.interfaces.ICounterPaymentService;
+import com.cinema.modules.payment.service.interfaces.ICounterReceiptFileService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,11 +25,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class StaffTicketSalesController {
 
     private final ICounterPaymentService counterPaymentService;
+    private final ICounterReceiptFileService counterReceiptFileService;
     private final IUserQueryService userQueryService;
 
     public StaffTicketSalesController(
-            ICounterPaymentService counterPaymentService, IUserQueryService userQueryService) {
+            ICounterPaymentService counterPaymentService,
+            ICounterReceiptFileService counterReceiptFileService,
+            IUserQueryService userQueryService) {
         this.counterPaymentService = counterPaymentService;
+        this.counterReceiptFileService = counterReceiptFileService;
         this.userQueryService = userQueryService;
     }
 
@@ -36,6 +43,13 @@ public class StaffTicketSalesController {
             @Valid @RequestBody CounterCheckoutRequest counterCheckoutRequest) {
         return ResponseEntity.ok(ApiResponse.success(
                 counterPaymentService.checkout(authenticatedUser.userId(), counterCheckoutRequest)));
+    }
+
+    @PostMapping("/receipts/{bookingCode}/save")
+    public ResponseEntity<ApiResponse<CounterReceiptFileResponse>> saveReceiptFile(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser, @PathVariable String bookingCode) {
+        return ResponseEntity.ok(ApiResponse.success(
+                counterReceiptFileService.saveReceiptFile(authenticatedUser.userId(), bookingCode)));
     }
 
     @GetMapping("/customers/lookup")

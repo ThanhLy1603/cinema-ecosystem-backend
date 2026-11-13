@@ -59,6 +59,7 @@ import java.util.stream.Collectors;
 @Service
 public class FnbPickupService implements IFnbPickupService {
 
+    private static final String SCAN_CHANNEL = "FNB_PICKUP";
     static final Duration EARLY_PICKUP_WINDOW = Duration.ofMinutes(60);
     private static final int HISTORY_LIMIT = 50;
     private static final Duration QUEUE_HORIZON = Duration.ofHours(24);
@@ -75,6 +76,7 @@ public class FnbPickupService implements IFnbPickupService {
     private final IShowtimeQueryService showtimeQueryService;
     private final IMovieQueryService movieQueryService;
     private final ICinemaQueryService cinemaQueryService;
+    private final ScanGuard scanGuard;
     private final Clock clock;
 
     public FnbPickupService(
@@ -88,6 +90,7 @@ public class FnbPickupService implements IFnbPickupService {
             IShowtimeQueryService showtimeQueryService,
             IMovieQueryService movieQueryService,
             ICinemaQueryService cinemaQueryService,
+            ScanGuard scanGuard,
             Clock clock) {
         this.bookingRepository = bookingRepository;
         this.bookingFnbDetailRepository = bookingFnbDetailRepository;
@@ -99,6 +102,7 @@ public class FnbPickupService implements IFnbPickupService {
         this.showtimeQueryService = showtimeQueryService;
         this.movieQueryService = movieQueryService;
         this.cinemaQueryService = cinemaQueryService;
+        this.scanGuard = scanGuard;
         this.clock = clock;
     }
 
@@ -106,8 +110,13 @@ public class FnbPickupService implements IFnbPickupService {
     @Override
     public FnbPickupScanResponse scan(Long staffUserId, FnbPickupScanRequest fnbPickupScanRequest) {
         branchAccessService.assertCanAccessCinema(staffUserId, fnbPickupScanRequest.cinemaId());
+        scanGuard.assertScanAllowed(staffUserId, fnbPickupScanRequest.cinemaId(), SCAN_CHANNEL);
         String code = normalizeCode(fnbPickupScanRequest.code());
-        return findBooking(code)
+        Optional<Booking> optionalBooking = findBooking(code);
+        if (optionalBooking.isEmpty()) {
+            scanGuard.registerUnknownCode(staffUserId, fnbPickupScanRequest.cinemaId(), SCAN_CHANNEL, code);
+        }
+        return optionalBooking
                 .map(booking -> evaluate(staffUserId, fnbPickupScanRequest.cinemaId(), booking))
                 .orElseGet(this::notFound);
     }
@@ -116,6 +125,7 @@ public class FnbPickupService implements IFnbPickupService {
     @Override
     public FnbPickupScanResponse deliver(Long staffUserId, FnbPickupDeliverRequest fnbPickupDeliverRequest) {
         branchAccessService.assertCanAccessCinema(staffUserId, fnbPickupDeliverRequest.cinemaId());
+        scanGuard.assertScanAllowed(staffUserId, fnbPickupDeliverRequest.cinemaId(), SCAN_CHANNEL);
         String code = normalizeCode(fnbPickupDeliverRequest.code());
         Booking booking = findBooking(code)
                 .orElseThrow(() -> new AppException("Không tìm thấy đơn đặt vé", HttpStatus.NOT_FOUND, "NOT_FOUND"));
@@ -277,7 +287,7 @@ public class FnbPickupService implements IFnbPickupService {
         if (status == BookingStatus.CANCELLED) {
             return blocked(FnbPickupResultCode.CANCELLED, "Đơn đặt vé này đã bị hủy.", pickupBooking);
         }
-        if (status == BookingStatus.REFUND_REQUIRED) {
+        if (status == BookingStatus.REFUND_REQUIRED || status == BookingStatus.REFUNDED) {
             return blocked(FnbPickupResultCode.REFUNDED, "Đơn đặt vé này đã hoàn tiền hoặc đang chờ hoàn tiền.",
                     pickupBooking);
         }

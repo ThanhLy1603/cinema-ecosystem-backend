@@ -38,7 +38,7 @@ import java.util.stream.Stream;
 public class BookingDetailService implements IBookingDetailService {
 
     private static final List<BookingStatus> MY_BOOKING_STATUSES =
-            List.of(BookingStatus.PAID, BookingStatus.REFUND_REQUIRED);
+            List.of(BookingStatus.PAID, BookingStatus.REFUND_REQUIRED, BookingStatus.REFUNDED);
     private static final int MAX_MY_BOOKINGS = 50;
 
     private final BookingRepository bookingRepository;
@@ -91,6 +91,13 @@ public class BookingDetailService implements IBookingDetailService {
                 .map(booking -> toBookingDetail(booking, now))
                 .flatMap(Optional::stream)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    @Override
+    public Optional<BookingDetailResponse> findBookingDetailByCode(String bookingCode) {
+        return bookingRepository.findByBookingCode(bookingCode)
+                .flatMap(booking -> toBookingDetail(booking, Instant.now(clock)));
     }
 
     @Transactional(readOnly = true)

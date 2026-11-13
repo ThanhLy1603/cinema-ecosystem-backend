@@ -16,6 +16,7 @@ import java.time.Instant;
 public class LoyaltyService implements ILoyaltyService {
 
     static final String EARN_TYPE = "EARN";
+    static final String REVOKE_TYPE = "REVOKE";
     static final BigDecimal EARN_RATE = new BigDecimal("0.05");
     static final BigDecimal VND_PER_POINT = BigDecimal.TEN;
 
@@ -55,5 +56,31 @@ public class LoyaltyService implements ILoyaltyService {
         loyaltyPointTransaction.setCreatedAt(Instant.now(clock));
         loyaltyPointTransactionRepository.save(loyaltyPointTransaction);
         return earnedPoints;
+    }
+
+    @Transactional
+    @Override
+    public int revokePointsForBooking(Long userId, Long bookingId) {
+        if (loyaltyPointTransactionRepository.existsByBookingIdAndTransactionType(bookingId, REVOKE_TYPE)) {
+            return 0;
+        }
+        int revokedPoints = loyaltyPointTransactionRepository
+                .findFirstByBookingIdAndTransactionType(bookingId, EARN_TYPE)
+                .map(LoyaltyPointTransaction::getPointsChange)
+                .orElse(0);
+        if (revokedPoints <= 0) {
+            return 0;
+        }
+        int balanceAfter = userLoyaltyService.addLoyaltyPoints(userId, -revokedPoints);
+        LoyaltyPointTransaction loyaltyPointTransaction = new LoyaltyPointTransaction();
+        loyaltyPointTransaction.setUserId(userId);
+        loyaltyPointTransaction.setBookingId(bookingId);
+        loyaltyPointTransaction.setPointsChange(-revokedPoints);
+        loyaltyPointTransaction.setTransactionType(REVOKE_TYPE);
+        loyaltyPointTransaction.setBalanceAfter(balanceAfter);
+        loyaltyPointTransaction.setDescription("Thu hồi điểm do hoàn tiền đơn vé");
+        loyaltyPointTransaction.setCreatedAt(Instant.now(clock));
+        loyaltyPointTransactionRepository.save(loyaltyPointTransaction);
+        return revokedPoints;
     }
 }

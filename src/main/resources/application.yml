@@ -49,6 +49,8 @@ spring:
       timeout: 5000ms
 
 app:
+  receipt:
+    directory: ${RECEIPT_DIR:../Receipt_Cinema}
   booking:
     late-booking-minutes: 30
   jwt:
