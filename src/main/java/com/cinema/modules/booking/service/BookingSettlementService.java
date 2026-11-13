@@ -7,6 +7,7 @@ import com.cinema.modules.booking.entity.Booking;
 import com.cinema.modules.booking.entity.SeatReservation;
 import com.cinema.modules.booking.entity.Ticket;
 import com.cinema.modules.booking.enums.BookingStatus;
+import com.cinema.modules.booking.enums.SalesChannel;
 import com.cinema.modules.booking.enums.SeatAvailability;
 import com.cinema.modules.booking.enums.SeatReservationStatus;
 import com.cinema.modules.booking.enums.SettlementOutcome;
@@ -87,12 +88,26 @@ public class BookingSettlementService implements IBookingSettlementService {
                     "Giá trị đơn đặt vé không hợp lệ", HttpStatus.CONFLICT, "BOOKING_AMOUNT_INVALID");
         }
         return new PayableBookingResponse(
-                booking.getId(), booking.getBookingCode(), booking.getFinalAmount(), booking.getExpiresAt());
+                booking.getId(),
+                booking.getBookingCode(),
+                booking.getCinemaId(),
+                booking.getFinalAmount(),
+                booking.getExpiresAt());
     }
 
     @Transactional
     @Override
     public SettlementOutcome settlePaidBooking(Long bookingId) {
+        return settle(bookingId, null);
+    }
+
+    @Transactional
+    @Override
+    public SettlementOutcome settleCounterBooking(Long bookingId, Long customerUserId, Long staffUserId) {
+        return settle(bookingId, new CounterSaleOwner(customerUserId, staffUserId));
+    }
+
+    private SettlementOutcome settle(Long bookingId, CounterSaleOwner counterSaleOwner) {
         Booking booking = bookingRepository.findByIdForUpdate(bookingId)
                 .orElseThrow(() -> new AppException("Không tìm thấy đơn đặt vé", HttpStatus.NOT_FOUND, "BOOKING_NOT_FOUND"));
         if (booking.getStatus() == BookingStatus.PAID) {
@@ -111,7 +126,7 @@ public class BookingSettlementService implements IBookingSettlementService {
         if (!allSeatsStillHeld) {
             return markRefundRequired(booking);
         }
-        issueTickets(booking, seatReservations);
+        issueTickets(booking, seatReservations, counterSaleOwner);
         return SettlementOutcome.PAID;
     }
 
@@ -119,11 +134,12 @@ public class BookingSettlementService implements IBookingSettlementService {
     @Override
     public Optional<BookingStatus> findOwnedBookingStatus(Long bookingId, Long userId) {
         return bookingRepository.findById(bookingId)
-                .filter(booking -> booking.getUserId().equals(userId))
+                .filter(booking -> userId.equals(booking.getUserId()))
                 .map(Booking::getStatus);
     }
 
-    private void issueTickets(Booking booking, List<SeatReservation> seatReservations) {
+    private void issueTickets(
+            Booking booking, List<SeatReservation> seatReservations, CounterSaleOwner counterSaleOwner) {
         seatReservationRepository.markBookedByBookingId(
                 booking.getId(), SeatReservationStatus.HELD, SeatReservationStatus.BOOKED);
         BigDecimal fallbackSeatPrice = resolveFallbackSeatPrice(booking, seatReservations);
@@ -134,6 +150,11 @@ public class BookingSettlementService implements IBookingSettlementService {
         ticketRepository.flush();
         booking.setQrCode(ticketCodeGenerator.generateQrCode());
         booking.setStatus(BookingStatus.PAID);
+        if (counterSaleOwner != null) {
+            booking.setSalesChannel(SalesChannel.COUNTER);
+            booking.setSoldByStaffUserId(counterSaleOwner.staffUserId());
+            booking.setUserId(counterSaleOwner.customerUserId());
+        }
         bookingRepository.save(booking);
         applicationEventPublisher.publishEvent(new BookingPaidEvent(
                 booking.getId(), booking.getUserId(), booking.getBookingCode(), booking.getFinalAmount()));
@@ -183,5 +204,8 @@ public class BookingSettlementService implements IBookingSettlementService {
     private AppException noPendingBooking() {
         return new AppException(
                 "Bạn chưa giữ ghế hoặc đã hết thời gian giữ ghế", HttpStatus.CONFLICT, "NO_PENDING_BOOKING");
+    }
+
+    private record CounterSaleOwner(Long customerUserId, Long staffUserId) {
     }
 }

@@ -1,6 +1,7 @@
 package com.cinema.modules.showtime.repository;
 
 import com.cinema.modules.showtime.entity.Showtime;
+import com.cinema.modules.showtime.enums.ShowtimeStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -24,4 +25,12 @@ public interface ShowtimeRepository extends JpaRepository<Showtime, Long>, JpaSp
             @Param("startTime") Instant startTime,
             @Param("endTime") Instant endTime,
             @Param("excludedShowtimeId") Long excludedShowtimeId);
+
+    @Query("select showtime from Showtime showtime where showtime.status = :status "
+            + "and showtime.endTime > :endsAfter and showtime.startTime < :startsBefore "
+            + "order by showtime.startTime asc, showtime.id asc")
+    List<Showtime> findByStatusAndTimeRange(
+            @Param("status") ShowtimeStatus status,
+            @Param("endsAfter") Instant endsAfter,
+            @Param("startsBefore") Instant startsBefore);
 }

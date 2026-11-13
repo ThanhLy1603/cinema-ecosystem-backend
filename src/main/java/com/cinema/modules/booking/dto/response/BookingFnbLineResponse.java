@@ -1,6 +1,7 @@
 package com.cinema.modules.booking.dto.response;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 
 public record BookingFnbLineResponse(
         Long comboId,
@@ -9,5 +10,7 @@ public record BookingFnbLineResponse(
         String imageUrl,
         int quantity,
         BigDecimal unitPrice,
-        BigDecimal lineAmount) {
+        BigDecimal lineAmount,
+        int deliveredQuantity,
+        Instant deliveredAt) {
 }

@@ -193,7 +193,7 @@ class PaymentServiceTest {
     @Test
     void createPaymentBuildsASignedUrlWithAmountTimesOneHundredAndExpiryBeforeTheHold() {
         when(bookingSettlementService.requirePayableBooking(USER_ID)).thenReturn(new PayableBookingResponse(
-                BOOKING_ID, "BK123", new BigDecimal("180000.00"), NOW.plusSeconds(600)));
+                BOOKING_ID, "BK123", 1L, new BigDecimal("180000.00"), NOW.plusSeconds(600)));
 
         PaymentUrlResponse paymentUrlResponse = paymentService.createVnpayPayment(USER_ID, "203.0.113.9");
 
@@ -213,7 +213,7 @@ class PaymentServiceTest {
     @Test
     void createPaymentIsRefusedWhenLessThanTwoMinutesOfHoldRemain() {
         when(bookingSettlementService.requirePayableBooking(USER_ID)).thenReturn(new PayableBookingResponse(
-                BOOKING_ID, "BK123", new BigDecimal("180000.00"), NOW.plusSeconds(90)));
+                BOOKING_ID, "BK123", 1L, new BigDecimal("180000.00"), NOW.plusSeconds(90)));
 
         AppException appException =
                 assertThrows(AppException.class, () -> paymentService.createVnpayPayment(USER_ID, "1.2.3.4"));

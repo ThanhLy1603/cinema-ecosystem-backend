@@ -8,6 +8,7 @@ import com.cinema.modules.booking.dto.response.BookingDetailResponse;
 import com.cinema.modules.booking.dto.response.BookingFnbLineResponse;
 import com.cinema.modules.booking.dto.response.BookingTicketResponse;
 import com.cinema.modules.booking.event.BookingPaidEvent;
+import com.cinema.modules.booking.event.CounterReceiptEmailRequestedEvent;
 import com.cinema.modules.booking.service.interfaces.IBookingDetailService;
 import com.cinema.modules.booking.service.interfaces.ITicketMailService;
 import jakarta.mail.MessagingException;
@@ -64,6 +65,9 @@ public class TicketMailService implements ITicketMailService {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     @Override
     public void onBookingPaid(BookingPaidEvent bookingPaidEvent) {
+        if (bookingPaidEvent.userId() == null) {
+            return;
+        }
         Optional<BookingDetailResponse> bookingDetailResponse =
                 bookingDetailService.findBookingDetail(bookingPaidEvent.bookingId());
         Optional<UserContactResponse> userContactResponse = userQueryService.findContact(bookingPaidEvent.userId());
@@ -75,6 +79,26 @@ public class TicketMailService implements ITicketMailService {
             javaMailSender.send(buildMessage(bookingDetailResponse.get(), userContactResponse.get()));
         } catch (MailException | MessagingException exception) {
             log.warn("Không gửi được email vé cho đơn {}", bookingPaidEvent.bookingCode(), exception);
+        }
+    }
+
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    @Override
+    public void onCounterReceiptEmailRequested(CounterReceiptEmailRequestedEvent counterReceiptEmailRequestedEvent) {
+        Optional<BookingDetailResponse> bookingDetailResponse =
+                bookingDetailService.findBookingDetail(counterReceiptEmailRequestedEvent.bookingId());
+        if (bookingDetailResponse.isEmpty()) {
+            log.warn("Không gửi được email vé quầy cho đơn {}: thiếu dữ liệu đơn",
+                    counterReceiptEmailRequestedEvent.bookingId());
+            return;
+        }
+        UserContactResponse recipientContactResponse =
+                new UserContactResponse(null, counterReceiptEmailRequestedEvent.email(), "Quý khách");
+        try {
+            javaMailSender.send(buildMessage(bookingDetailResponse.get(), recipientContactResponse));
+        } catch (MailException | MessagingException exception) {
+            log.warn("Không gửi được email vé quầy cho đơn {}", bookingDetailResponse.get().bookingCode(), exception);
         }
     }
 

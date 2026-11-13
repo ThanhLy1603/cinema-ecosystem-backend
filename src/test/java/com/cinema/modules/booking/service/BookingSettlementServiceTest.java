@@ -7,6 +7,7 @@ import com.cinema.modules.booking.entity.Booking;
 import com.cinema.modules.booking.entity.SeatReservation;
 import com.cinema.modules.booking.entity.Ticket;
 import com.cinema.modules.booking.enums.BookingStatus;
+import com.cinema.modules.booking.enums.SalesChannel;
 import com.cinema.modules.booking.enums.SeatAvailability;
 import com.cinema.modules.booking.enums.SeatReservationStatus;
 import com.cinema.modules.booking.enums.SettlementOutcome;
@@ -144,6 +145,44 @@ class BookingSettlementServiceTest {
         TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
         verify(seatStatusBroadcaster).broadcast(SHOWTIME_ID, List.of(
                 new SeatStateChange(11L, SeatAvailability.SOLD), new SeatStateChange(12L, SeatAvailability.SOLD)));
+    }
+
+    @Test
+    void counterSettlementMovesOwnershipToTheCustomerAndRecordsChannelAndStaff() {
+        when(seatReservationRepository.findByBookingIdOrderBySeatId(BOOKING_ID)).thenReturn(List.of(
+                reservation(11L, SeatReservationStatus.HELD, "90000")));
+
+        SettlementOutcome settlementOutcome = bookingSettlementService.settleCounterBooking(BOOKING_ID, 9L, 3L);
+
+        assertEquals(SettlementOutcome.PAID, settlementOutcome);
+        assertEquals(BookingStatus.PAID, booking.getStatus());
+        assertEquals(SalesChannel.COUNTER, booking.getSalesChannel());
+        assertEquals(3L, booking.getSoldByStaffUserId());
+        assertEquals(9L, booking.getUserId());
+        verify(applicationEventPublisher)
+                .publishEvent(new BookingPaidEvent(BOOKING_ID, 9L, "BK123", new BigDecimal("215000")));
+    }
+
+    @Test
+    void counterSettlementForWalkInCustomerClearsTheOwnerSoNoPointsOrMailGoToTheStaff() {
+        when(seatReservationRepository.findByBookingIdOrderBySeatId(BOOKING_ID)).thenReturn(List.of(
+                reservation(11L, SeatReservationStatus.HELD, "90000")));
+
+        bookingSettlementService.settleCounterBooking(BOOKING_ID, null, 3L);
+
+        assertEquals(null, booking.getUserId());
+        assertEquals(3L, booking.getSoldByStaffUserId());
+        verify(applicationEventPublisher)
+                .publishEvent(new BookingPaidEvent(BOOKING_ID, null, "BK123", new BigDecimal("215000")));
+    }
+
+    @Test
+    void ownedBookingStatusIsEmptyForWalkInBookings() {
+        booking.setUserId(null);
+        booking.setStatus(BookingStatus.PAID);
+        when(bookingRepository.findById(BOOKING_ID)).thenReturn(Optional.of(booking));
+
+        assertTrue(bookingSettlementService.findOwnedBookingStatus(BOOKING_ID, USER_ID).isEmpty());
     }
 
     @Test

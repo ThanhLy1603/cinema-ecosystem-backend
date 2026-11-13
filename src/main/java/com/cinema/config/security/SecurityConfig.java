@@ -44,6 +44,10 @@ public class SecurityConfig {
             "/api/v1/showtimes/**"
     };
 
+    private static final String[] STAFF_MANAGER_ONLY_ENDPOINTS = {
+            "/api/v1/staff/check-in/undo"
+    };
+
     private static final String[] PUBLIC_GATEWAY_CALLBACK_ENDPOINTS = {
             "/api/v1/payments/vnpay-ipn"
     };
@@ -85,6 +89,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, PUBLIC_GATEWAY_CALLBACK_ENDPOINTS).permitAll()
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                         .requestMatchers("/api/v1/admin/**").hasAnyAuthority(Role.ADMIN, Role.MANAGER)
+                        .requestMatchers(HttpMethod.POST, STAFF_MANAGER_ONLY_ENDPOINTS).hasAnyAuthority(Role.ADMIN, Role.MANAGER)
                         .requestMatchers("/api/v1/staff/**").hasAnyAuthority(Role.STAFF, Role.MANAGER, Role.ADMIN)
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

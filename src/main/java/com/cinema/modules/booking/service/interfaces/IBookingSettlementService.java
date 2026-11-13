@@ -12,5 +12,7 @@ public interface IBookingSettlementService {
 
     SettlementOutcome settlePaidBooking(Long bookingId);
 
+    SettlementOutcome settleCounterBooking(Long bookingId, Long customerUserId, Long staffUserId);
+
     Optional<BookingStatus> findOwnedBookingStatus(Long bookingId, Long userId);
 }

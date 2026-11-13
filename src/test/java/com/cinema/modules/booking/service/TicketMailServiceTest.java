@@ -9,6 +9,7 @@ import com.cinema.modules.booking.dto.response.BookingShowtimeResponse;
 import com.cinema.modules.booking.dto.response.BookingTicketResponse;
 import com.cinema.modules.booking.enums.BookingStatus;
 import com.cinema.modules.booking.event.BookingPaidEvent;
+import com.cinema.modules.booking.event.CounterReceiptEmailRequestedEvent;
 import com.cinema.modules.booking.service.interfaces.IBookingDetailService;
 import com.cinema.modules.cinema.enums.ScreenType;
 import com.cinema.modules.movie.enums.AgeRating;
@@ -65,8 +66,8 @@ class TicketMailServiceTest {
                 100L, "BK123", BookingStatus.PAID, Instant.parse("2026-11-11T03:00:00Z"), null, Instant.now(),
                 new BookingShowtimeResponse(20L, Instant.parse("2026-11-11T13:10:00Z"), Instant.parse("2026-11-11T15:10:00Z"),
                         7L, "phim", movieTitle, null, AgeRating.P, 120, 1L, "Star Cineplex", 3L, "Phòng 1", ScreenType.SCREEN_2D),
-                List.of(new BookingSeatResponse(11L, "A7", "Thường", new BigDecimal("90000"))),
-                List.of(new BookingFnbLineResponse(null, 7L, "Bắp ngọt", null, 2, new BigDecimal("35000"), new BigDecimal("70000"))),
+                List.of(new BookingSeatResponse(11L, "A7", "Thường", "STANDARD", new BigDecimal("90000"))),
+                List.of(new BookingFnbLineResponse(null, 7L, "Bắp ngọt", null, 2, new BigDecimal("35000"), new BigDecimal("70000"), 0, null)),
                 new BigDecimal("90000"), new BigDecimal("70000"), BigDecimal.ZERO, new BigDecimal("160000"),
                 new BigDecimal("160000"),
                 List.of(new BookingTicketResponse(1L, "TKABC234", 11L, "A7", new BigDecimal("90000"), false, null)),
@@ -121,5 +122,24 @@ class TicketMailServiceTest {
         ticketMailService.onBookingPaid(new BookingPaidEvent(100L, 5L, "BK123", new BigDecimal("160000")));
 
         verify(javaMailSender, never()).send(any(MimeMessage.class));
+    }
+
+    @Test
+    void walkInPaidEventWithoutOwnerSendsNothing() {
+        ticketMailService.onBookingPaid(new BookingPaidEvent(100L, null, "BK123", new BigDecimal("160000")));
+
+        verify(javaMailSender, never()).send(any(MimeMessage.class));
+    }
+
+    @Test
+    void counterReceiptEventSendsTheTicketToTheProvidedEmail() throws Exception {
+        MimeMessage mimeMessage = new MimeMessage(Session.getInstance(new Properties()));
+        when(bookingDetailService.findBookingDetail(100L)).thenReturn(Optional.of(bookingDetail("Phim")));
+        when(javaMailSender.createMimeMessage()).thenReturn(mimeMessage);
+
+        ticketMailService.onCounterReceiptEmailRequested(new CounterReceiptEmailRequestedEvent(100L, "khach@mail.vn"));
+
+        verify(javaMailSender).send(mimeMessage);
+        assertEquals("khach@mail.vn", mimeMessage.getAllRecipients()[0].toString());
     }
 }

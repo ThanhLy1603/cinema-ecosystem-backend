@@ -201,6 +201,7 @@ public class BookingDetailService implements IBookingDetailService {
                 seatId,
                 toSeatLabel(seatLabelInfoResponse, seatId),
                 seatLabelInfoResponse == null ? null : seatLabelInfoResponse.seatTypeName(),
+                seatLabelInfoResponse == null ? null : seatLabelInfoResponse.seatTypeCode(),
                 price);
     }
 

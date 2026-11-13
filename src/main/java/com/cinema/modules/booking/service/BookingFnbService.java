@@ -187,7 +187,9 @@ public class BookingFnbService implements IBookingFnbService {
                 fnbProductInfoResponse == null ? null : fnbProductInfoResponse.imageUrl(),
                 bookingFnbDetail.getQuantity(),
                 bookingFnbDetail.getUnitPrice(),
-                bookingFnbDetail.getUnitPrice().multiply(BigDecimal.valueOf(bookingFnbDetail.getQuantity())));
+                bookingFnbDetail.getUnitPrice().multiply(BigDecimal.valueOf(bookingFnbDetail.getQuantity())),
+                bookingFnbDetail.getDeliveredQuantity(),
+                bookingFnbDetail.getDeliveredAt());
     }
 
     private BookingFnbResponse emptyResponse(Instant now) {

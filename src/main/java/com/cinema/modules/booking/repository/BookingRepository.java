@@ -35,5 +35,26 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     Optional<Booking> findByBookingCode(String bookingCode);
 
+    Optional<Booking> findByQrCode(String qrCode);
+
     List<Booking> findByUserIdAndStatusInOrderByCreatedAtDesc(Long userId, Collection<BookingStatus> statuses);
+
+    @Query("select booking from Booking booking where booking.cinemaId = :cinemaId and booking.status = :status "
+            + "and booking.showtimeId in :showtimeIds and exists (select bookingFnbDetail.id from BookingFnbDetail "
+            + "bookingFnbDetail where bookingFnbDetail.bookingId = booking.id "
+            + "and bookingFnbDetail.deliveredQuantity < bookingFnbDetail.quantity) "
+            + "order by booking.createdAt asc, booking.id asc")
+    List<Booking> findWithUndeliveredFnb(
+            @Param("cinemaId") Long cinemaId,
+            @Param("status") BookingStatus status,
+            @Param("showtimeIds") Collection<Long> showtimeIds);
+
+    @Query("select booking from Booking booking where booking.cinemaId = :cinemaId and booking.status = :status "
+            + "and booking.showtimeId in :showtimeIds and exists (select ticket.id from Ticket ticket "
+            + "where ticket.bookingId = booking.id and ticket.checkedIn = false) "
+            + "order by booking.createdAt asc, booking.id asc")
+    List<Booking> findWithUncheckedTickets(
+            @Param("cinemaId") Long cinemaId,
+            @Param("status") BookingStatus status,
+            @Param("showtimeIds") Collection<Long> showtimeIds);
 }

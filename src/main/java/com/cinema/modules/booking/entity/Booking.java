@@ -2,6 +2,7 @@ package com.cinema.modules.booking.entity;
 
 import com.cinema.common.entity.BaseEntity;
 import com.cinema.modules.booking.enums.BookingStatus;
+import com.cinema.modules.booking.enums.SalesChannel;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -31,7 +32,7 @@ public class Booking extends BaseEntity {
     @Column(name = "booking_code", nullable = false, unique = true, length = 50)
     private String bookingCode;
 
-    @Column(name = "user_id", nullable = false)
+    @Column(name = "user_id")
     private Long userId;
 
     @Column(name = "cinema_id", nullable = false)
@@ -58,4 +59,11 @@ public class Booking extends BaseEntity {
 
     @Column(name = "qr_code", length = 100)
     private String qrCode;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "sales_channel", nullable = false, length = 20)
+    private SalesChannel salesChannel = SalesChannel.ONLINE;
+
+    @Column(name = "sold_by_staff_user_id")
+    private Long soldByStaffUserId;
 }

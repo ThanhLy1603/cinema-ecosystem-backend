@@ -10,12 +10,15 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.List;
 
 @Repository
 public interface BookingFnbDetailRepository extends JpaRepository<BookingFnbDetail, Long> {
 
     List<BookingFnbDetail> findByBookingIdOrderByIdAsc(Long bookingId);
+
+    List<BookingFnbDetail> findByBookingIdInOrderByIdAsc(Collection<Long> bookingIds);
 
     @Modifying
     @Query("delete from BookingFnbDetail bookingFnbDetail where bookingFnbDetail.bookingId = :bookingId")

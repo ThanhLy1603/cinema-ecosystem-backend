@@ -10,4 +10,6 @@ public interface IFnbQueryService {
     Map<Long, FnbProductInfoResponse> findComboInfos(Collection<Long> comboIds);
 
     Map<Long, FnbProductInfoResponse> findItemInfos(Collection<Long> itemIds);
+
+    Map<Long, String> findComboCompositions(Collection<Long> comboIds);
 }

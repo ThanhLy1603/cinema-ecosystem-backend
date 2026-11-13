@@ -16,6 +16,9 @@ public class LoyaltyBookingPaidListener {
 
     @EventListener
     public void onBookingPaid(BookingPaidEvent bookingPaidEvent) {
+        if (bookingPaidEvent.userId() == null) {
+            return;
+        }
         loyaltyService.earnPointsForBooking(
                 bookingPaidEvent.userId(), bookingPaidEvent.bookingId(), bookingPaidEvent.finalAmount());
     }
